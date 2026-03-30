@@ -1,52 +1,74 @@
 (function () {
+  // ---------------------------
+  // DOM
+  // ---------------------------
   var canvas = document.getElementById('gameCanvas');
   var ctx = canvas.getContext('2d');
-
   var menuBtn = document.getElementById('menuBtn');
   var clearBtn = document.getElementById('clearBtn');
   var launchBtn = document.getElementById('launchBtn');
   var modeLabel = document.getElementById('modeLabel');
+  var partsPanel = document.getElementById('partsPanel');
   var partButtons = Array.prototype.slice.call(document.querySelectorAll('.part-btn'));
 
-  var mode = 'BUILD';
-  var selectedPart = 'engine';
-  var placedParts = [];
+  // ---------------------------
+  // Game state
+  // ---------------------------
+  var gameState = 'BUILD'; // BUILD | FLIGHT
+  var flightState = 'FLYING'; // FLYING | LANDED | CRASHED
+  var selectedPartType = 'engine';
 
+  // ---------------------------
+  // Build system
+  // ---------------------------
   var PARTS = {
-    engine: { width: 24, height: 16, mass: 320, thrust: 9000, fuel: 0, color: '#f97316' },
-    tank: { width: 26, height: 44, mass: 620, thrust: 0, fuel: 45, color: '#64748b' },
-    capsule: { width: 28, height: 22, mass: 260, thrust: 0, fuel: 0, color: '#f1f5f9' },
-    legs: { width: 40, height: 12, mass: 120, thrust: 0, fuel: 0, color: '#22c55e' },
-    solar: { width: 56, height: 8, mass: 90, thrust: 0, fuel: 0, color: '#38bdf8' }
+    engine: { type: 'engine', width: 28, height: 16, color: '#f97316', mass: 380, thrust: 9000, fuel: 0 },
+    tank: { type: 'tank', width: 30, height: 50, color: '#64748b', mass: 650, thrust: 0, fuel: 60 },
+    capsule: { type: 'capsule', width: 30, height: 24, color: '#f8fafc', mass: 260, thrust: 0, fuel: 0 },
+    legs: { type: 'legs', width: 44, height: 12, color: '#22c55e', mass: 130, thrust: 0, fuel: 0 },
+    solar: { type: 'solar', width: 62, height: 10, color: '#38bdf8', mass: 90, thrust: 0, fuel: 0 }
   };
 
+  var builtRocket = [];
+  var dragState = { active: false, index: -1, dx: 0, dy: 0 };
+
+  // ---------------------------
+  // Flight system
+  // ---------------------------
   var rocket = {
     x: 0,
     y: 0,
     vx: 0,
     vy: 0,
     angle: 0,
-    av: 0,
+    angularVelocity: 0,
     throttle: 0,
     throttleUp: false,
     throttleDown: false,
-    left: false,
-    right: false,
-    mass: 1400,
-    thrust: 10000,
-    fuel: 60,
-    maxFuel: 60,
-    width: 26,
-    height: 80
+    rotateLeft: false,
+    rotateRight: false,
+    mass: 1200,
+    thrust: 9000,
+    fuel: 50,
+    maxFuel: 50,
+    width: 34,
+    height: 90
   };
 
   var gravity = 9.81;
-  var drag = 0.015;
-  var ppm = 4.5;
-  var camX = 0;
-  var camY = 0;
+  var dragCoeff = 0.016;
+  var angularDamping = 0.93;
+  var cameraX = 0;
+  var cameraY = 0;
 
-  function resize() {
+  function getTerrainY(x) {
+    return 340 + Math.sin(x * 0.012) * 16 + Math.sin(x * 0.035) * 8;
+  }
+
+  // ---------------------------
+  // Canvas sizing
+  // ---------------------------
+  function resizeCanvas() {
     var rect = canvas.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
@@ -54,163 +76,222 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  function setPart(type) {
-    selectedPart = type;
+  // ---------------------------
+  // Helpers
+  // ---------------------------
+  function setSelectedPart(type) {
+    selectedPartType = type;
     partButtons.forEach(function (btn) {
       btn.classList.toggle('active', btn.getAttribute('data-part') === type);
     });
   }
 
-  function placePartAt(x, y) {
-    var def = PARTS[selectedPart];
-    var snapX = Math.round(x / 8) * 8;
+  function updateUIState() {
+    partsPanel.style.opacity = gameState === 'BUILD' ? '1' : '0.45';
+    partsPanel.style.pointerEvents = gameState === 'BUILD' ? 'auto' : 'none';
 
-    if (placedParts.length > 0) {
-      var top = placedParts[placedParts.length - 1];
-      y = top.y - top.def.height / 2 - def.height / 2;
-      snapX = top.x;
+    if (gameState === 'BUILD') {
+      modeLabel.textContent = 'BUILD MODE';
+    } else {
+      if (flightState === 'FLYING') {
+        modeLabel.textContent = 'FLIGHT MODE | Fuel ' + rocket.fuel.toFixed(0) + '%';
+      } else if (flightState === 'LANDED') {
+        modeLabel.textContent = 'SAFE LANDING / HARD LANDING | Press Menu to Build';
+      } else {
+        modeLabel.textContent = 'CRASHED | Press Menu to Build';
+      }
     }
+  }
 
-    placedParts.push({ type: selectedPart, x: snapX, y: y, def: def });
+  function getMouseCanvasPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  }
+
+  function findPartAt(px, py) {
+    var i;
+    for (i = builtRocket.length - 1; i >= 0; i -= 1) {
+      var p = builtRocket[i];
+      var left = p.x - p.def.width / 2;
+      var right = p.x + p.def.width / 2;
+      var top = p.y - p.def.height / 2;
+      var bottom = p.y + p.def.height / 2;
+      if (px >= left && px <= right && py >= top && py <= bottom) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // ---------------------------
+  // Build interactions
+  // ---------------------------
+  function placePart(px, py) {
+    var def = PARTS[selectedPartType];
+    builtRocket.push({
+      type: selectedPartType,
+      def: def,
+      x: px,
+      y: py
+    });
   }
 
   function clearBuild() {
-    placedParts = [];
+    builtRocket = [];
   }
 
-  function computeStats() {
+  function computeRocketFromBuild() {
     var mass = 900;
     var thrust = 0;
-    var fuel = 12;
-    var p;
-    for (p = 0; p < placedParts.length; p += 1) {
-      mass += placedParts[p].def.mass;
-      thrust += placedParts[p].def.thrust;
-      fuel += placedParts[p].def.fuel;
+    var fuel = 20;
+    var i;
+
+    for (i = 0; i < builtRocket.length; i += 1) {
+      mass += builtRocket[i].def.mass;
+      thrust += builtRocket[i].def.thrust;
+      fuel += builtRocket[i].def.fuel;
     }
+
     rocket.mass = mass;
-    rocket.thrust = Math.max(4000, thrust);
+    rocket.thrust = Math.max(5000, thrust);
     rocket.fuel = fuel;
     rocket.maxFuel = fuel;
   }
 
-  function launch() {
-    computeStats();
+  function startFlight() {
+    computeRocketFromBuild();
     rocket.x = 0;
-    rocket.y = -20;
+    rocket.y = 120;
     rocket.vx = 0;
     rocket.vy = 0;
     rocket.angle = 0;
-    rocket.av = 0;
+    rocket.angularVelocity = 0;
     rocket.throttle = 0;
-    camX = rocket.x;
-    camY = rocket.y;
-    mode = 'FLIGHT';
-    modeLabel.textContent = 'FLIGHT MODE';
+    rocket.throttleUp = false;
+    rocket.throttleDown = false;
+    rocket.rotateLeft = false;
+    rocket.rotateRight = false;
+    cameraX = rocket.x;
+    cameraY = rocket.y;
+    flightState = 'FLYING';
+    gameState = 'FLIGHT';
   }
 
-  function getGroundY(x) {
-    return 300 + Math.sin(x * 0.02) * 22 + Math.sin(x * 0.07) * 7;
-  }
-
+  // ---------------------------
+  // Flight update
+  // ---------------------------
   function updateFlight(dt) {
+    if (flightState !== 'FLYING') {
+      return;
+    }
+
     if (rocket.throttleUp && rocket.fuel > 0) {
-      rocket.throttle = Math.min(1, rocket.throttle + dt * 0.8);
+      rocket.throttle = Math.min(1, rocket.throttle + 0.8 * dt);
     }
     if (rocket.throttleDown) {
-      rocket.throttle = Math.max(0, rocket.throttle - dt * 0.9);
+      rocket.throttle = Math.max(0, rocket.throttle - 0.9 * dt);
     }
 
-    if (rocket.left) {
-      rocket.av -= dt * 1.25;
+    if (rocket.rotateLeft) {
+      rocket.angularVelocity -= 1.3 * dt;
     }
-    if (rocket.right) {
-      rocket.av += dt * 1.25;
+    if (rocket.rotateRight) {
+      rocket.angularVelocity += 1.3 * dt;
     }
 
-    rocket.av *= 0.95;
-    rocket.angle += rocket.av * dt;
+    rocket.angularVelocity *= angularDamping;
+    rocket.angle += rocket.angularVelocity;
 
-    var fx = Math.sin(rocket.angle) * rocket.thrust * rocket.throttle;
-    var fy = rocket.mass * gravity - Math.cos(rocket.angle) * rocket.thrust * rocket.throttle;
+    var fx = 0;
+    var fy = rocket.mass * gravity;
 
     if (rocket.throttle > 0 && rocket.fuel > 0) {
-      rocket.fuel = Math.max(0, rocket.fuel - dt * rocket.throttle * 0.6);
+      var thrustForce = rocket.thrust * rocket.throttle;
+      fx += Math.sin(rocket.angle) * thrustForce;
+      fy += -Math.cos(rocket.angle) * thrustForce;
+      rocket.fuel = Math.max(0, rocket.fuel - 0.65 * rocket.throttle * dt * 60);
     }
 
-    fx += -drag * rocket.vx;
-    fy += -drag * rocket.vy;
+    fx += -dragCoeff * rocket.vx;
+    fy += -dragCoeff * rocket.vy;
 
-    rocket.vx += (fx / rocket.mass) * dt;
-    rocket.vy += (fy / rocket.mass) * dt;
-    rocket.x += rocket.vx * dt * 60;
-    rocket.y += rocket.vy * dt * 60;
+    rocket.vx += (fx / rocket.mass) * dt * 60;
+    rocket.vy += (fy / rocket.mass) * dt * 60;
 
-    var groundY = getGroundY(rocket.x);
+    rocket.x += rocket.vx * dt;
+    rocket.y += rocket.vy * dt;
+
+    var terrainY = getTerrainY(rocket.x);
     var bottom = rocket.y + rocket.height / 2;
-    if (bottom >= groundY && rocket.vy > 0) {
-      rocket.y = groundY - rocket.height / 2;
+    if (bottom >= terrainY && rocket.vy > 0) {
+      rocket.y = terrainY - rocket.height / 2;
+
+      var impactSpeed = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
+      if (impactSpeed <= 7) {
+        flightState = 'LANDED';
+      } else if (impactSpeed <= 13) {
+        flightState = 'LANDED';
+      } else {
+        flightState = 'CRASHED';
+      }
+
       rocket.vx = 0;
       rocket.vy = 0;
       rocket.throttle = 0;
     }
 
-    camX += (rocket.x - camX) * 0.08;
-    camY += (rocket.y - camY) * 0.08;
+    cameraX += (rocket.x - cameraX) * 0.09;
+    cameraY += (rocket.y - cameraY) * 0.09;
   }
 
-  function drawBuild() {
+  // ---------------------------
+  // Rendering
+  // ---------------------------
+  function drawBuildMode() {
     ctx.fillStyle = '#0a1428';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
     ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    var gx;
-    for (gx = 0; gx < canvas.width; gx += 24) {
+    var x;
+    for (x = 0; x < canvas.clientWidth; x += 26) {
       ctx.beginPath();
-      ctx.moveTo(gx, 0);
-      ctx.lineTo(gx, canvas.height);
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.clientHeight);
       ctx.stroke();
     }
 
-    var gy;
-    for (gy = 0; gy < canvas.height; gy += 24) {
+    var y;
+    for (y = 0; y < canvas.clientHeight; y += 26) {
       ctx.beginPath();
-      ctx.moveTo(0, gy);
-      ctx.lineTo(canvas.width, gy);
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.clientWidth, y);
       ctx.stroke();
     }
 
     var i;
-    for (i = 0; i < placedParts.length; i += 1) {
-      var part = placedParts[i];
-      var x = canvas.width * 0.5 + part.x;
-      var y = canvas.height * 0.75 - (placedParts.length - 1 - i) * 26;
+    for (i = 0; i < builtRocket.length; i += 1) {
+      var part = builtRocket[i];
       ctx.fillStyle = part.def.color;
-      ctx.fillRect(x - part.def.width / 2, y - part.def.height / 2, part.def.width, part.def.height);
+      ctx.fillRect(part.x - part.def.width / 2, part.y - part.def.height / 2, part.def.width, part.def.height);
     }
   }
 
-  function drawFlight() {
+  function drawFlightMode() {
     ctx.fillStyle = '#050b17';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    var i;
-    ctx.fillStyle = '#ffffff';
-    for (i = 0; i < 70; i += 1) {
-      var sx = (i * 73) % canvas.width;
-      var sy = (i * 131) % canvas.height;
-      ctx.fillRect(sx, sy, 1, 1);
-    }
+    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
     ctx.save();
-    ctx.translate(canvas.width / 2 - camX, canvas.height / 2 - camY);
+    ctx.translate(canvas.clientWidth / 2 - cameraX, canvas.clientHeight / 2 - cameraY);
 
     ctx.fillStyle = '#355e3b';
     ctx.beginPath();
-    ctx.moveTo(-10000, getGroundY(-10000));
-    for (i = -1000; i <= 1000; i += 8) {
-      ctx.lineTo(i, getGroundY(i));
+    ctx.moveTo(-10000, getTerrainY(-10000));
+    var i;
+    for (i = -2000; i <= 2000; i += 8) {
+      ctx.lineTo(i, getTerrainY(i));
     }
     ctx.lineTo(10000, 10000);
     ctx.lineTo(-10000, 10000);
@@ -229,11 +310,12 @@
     ctx.lineTo(10, -30);
     ctx.closePath();
     ctx.fill();
-    if (rocket.throttle > 0 && rocket.fuel > 0) {
+
+    if (rocket.throttle > 0 && rocket.fuel > 0 && flightState === 'FLYING') {
       ctx.fillStyle = '#fb923c';
       ctx.beginPath();
       ctx.moveTo(-4, 30);
-      ctx.lineTo(0, 44 + Math.random() * 8);
+      ctx.lineTo(0, 45 + Math.random() * 8);
       ctx.lineTo(4, 30);
       ctx.closePath();
       ctx.fill();
@@ -241,70 +323,81 @@
     ctx.restore();
 
     ctx.restore();
-
-    modeLabel.textContent = 'FLIGHT MODE | Fuel ' + rocket.fuel.toFixed(0) + '%';
   }
 
   function render() {
-    if (mode === 'BUILD') {
-      drawBuild();
-      modeLabel.textContent = 'BUILD MODE';
+    if (gameState === 'BUILD') {
+      drawBuildMode();
     } else {
-      drawFlight();
+      drawFlightMode();
     }
+    updateUIState();
   }
 
-  function loop(now) {
-    if (!loop.last) {
-      loop.last = now;
-    }
-    var dt = Math.min((now - loop.last) / 1000, 0.033);
-    loop.last = now;
-
-    if (mode === 'FLIGHT') {
-      updateFlight(dt);
-    }
-    render();
-    requestAnimationFrame(loop);
-  }
-
+  // ---------------------------
+  // Input wiring
+  // ---------------------------
   partButtons.forEach(function (btn) {
     btn.addEventListener('click', function () {
-      setPart(btn.getAttribute('data-part'));
+      setSelectedPart(btn.getAttribute('data-part'));
     });
   });
 
-  canvas.addEventListener('click', function (e) {
-    if (mode !== 'BUILD') {
+  canvas.addEventListener('mousedown', function (e) {
+    if (gameState !== 'BUILD') {
       return;
     }
-    var rect = canvas.getBoundingClientRect();
-    var x = e.clientX - rect.left - rect.width * 0.5;
-    var y = e.clientY - rect.top;
-    placePartAt(x, y);
+    var pos = getMouseCanvasPos(e);
+    var idx = findPartAt(pos.x, pos.y);
+    if (idx >= 0) {
+      dragState.active = true;
+      dragState.index = idx;
+      dragState.dx = builtRocket[idx].x - pos.x;
+      dragState.dy = builtRocket[idx].y - pos.y;
+    } else {
+      placePart(pos.x, pos.y);
+    }
+  });
+
+  canvas.addEventListener('mousemove', function (e) {
+    if (!dragState.active || gameState !== 'BUILD') {
+      return;
+    }
+    var pos = getMouseCanvasPos(e);
+    var part = builtRocket[dragState.index];
+    if (!part) {
+      return;
+    }
+    part.x = pos.x + dragState.dx;
+    part.y = pos.y + dragState.dy;
+  });
+
+  window.addEventListener('mouseup', function () {
+    dragState.active = false;
+    dragState.index = -1;
   });
 
   menuBtn.addEventListener('click', function () {
-    mode = 'BUILD';
+    gameState = 'BUILD';
   });
   clearBtn.addEventListener('click', clearBuild);
-  launchBtn.addEventListener('click', launch);
+  launchBtn.addEventListener('click', startFlight);
 
   document.addEventListener('keydown', function (e) {
-    if (e.code === 'KeyB') {
-      mode = 'BUILD';
-    } else if (e.code === 'KeyC') {
-      mode = 'FLIGHT';
-    } else if (e.code === 'KeyW') {
+    if (e.code === 'KeyW') {
       rocket.throttleUp = true;
     } else if (e.code === 'KeyS') {
       rocket.throttleDown = true;
     } else if (e.code === 'KeyA') {
-      rocket.left = true;
+      rocket.rotateLeft = true;
     } else if (e.code === 'KeyD') {
-      rocket.right = true;
-    } else if (e.code === 'KeyR') {
-      launch();
+      rocket.rotateRight = true;
+    } else if (e.code === 'KeyB') {
+      gameState = 'BUILD';
+    } else if (e.code === 'KeyC') {
+      if (gameState === 'BUILD') {
+        gameState = 'FLIGHT';
+      }
     }
   });
 
@@ -314,14 +407,31 @@
     } else if (e.code === 'KeyS') {
       rocket.throttleDown = false;
     } else if (e.code === 'KeyA') {
-      rocket.left = false;
+      rocket.rotateLeft = false;
     } else if (e.code === 'KeyD') {
-      rocket.right = false;
+      rocket.rotateRight = false;
     }
   });
 
-  resize();
-  setPart(selectedPart);
-  window.addEventListener('resize', resize);
+  // ---------------------------
+  // Loop
+  // ---------------------------
+  function loop(ts) {
+    if (!loop.last) {
+      loop.last = ts;
+    }
+    var dt = Math.min((ts - loop.last) / 1000, 0.033);
+    loop.last = ts;
+
+    if (gameState === 'FLIGHT') {
+      updateFlight(dt);
+    }
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  resizeCanvas();
+  setSelectedPart(selectedPartType);
+  window.addEventListener('resize', resizeCanvas);
   requestAnimationFrame(loop);
 })();
