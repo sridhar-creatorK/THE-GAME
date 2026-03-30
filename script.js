@@ -10,6 +10,17 @@
   var fuelEl = document.getElementById('fuel');
   var fuelBarEl = document.getElementById('fuelBar');
   var rotationSensitivityEl = document.getElementById('rotationSensitivity');
+  var menuSceneEl = document.getElementById('menuScene');
+  var buildSceneEl = document.getElementById('buildScene');
+  var postFlightSceneEl = document.getElementById('postFlightScene');
+  var postFlightTextEl = document.getElementById('postFlightText');
+  var startBuildBtn = document.getElementById('startBuildBtn');
+  var addEngineBtn = document.getElementById('addEngineBtn');
+  var addFuelBtn = document.getElementById('addFuelBtn');
+  var launchBtn = document.getElementById('launchBtn');
+  var returnBuildBtn = document.getElementById('returnBuildBtn');
+  var engineCountEl = document.getElementById('engineCount');
+  var fuelTankCountEl = document.getElementById('fuelTankCount');
 
   var PIXELS_PER_METER = 5.2;
   var WORLD_W_M = 170;
@@ -26,6 +37,12 @@
 
   var state = 'READY'; // READY | FLYING | CRASHED
   var readyStatus = 'Ready';
+  var scene = 'MENU'; // MENU | BUILD | FLIGHT
+
+  var buildConfig = {
+    engines: 1,
+    fuelTanks: 1
+  };
 
   var rocket = {
     x: WORLD_W_M * 0.5,
@@ -37,6 +54,7 @@
     throttle: 0,
     widthM: 4.6,
     heightM: 14,
+    maxFuel: 100,
     fuel: 100,
     throttleUp: false,
     throttleDown: false,
@@ -77,7 +95,7 @@
     rocket.angle = 0;
     rocket.angularVelocity = 0;
     rocket.throttle = 0;
-    rocket.fuel = 100;
+    rocket.fuel = rocket.maxFuel;
     rocket.throttleUp = false;
     rocket.throttleDown = false;
     rocket.rotateLeft = false;
@@ -98,16 +116,16 @@
   }
 
   function keyDown(e) {
-    if (e.code === 'ArrowUp' || e.code === 'Space') {
+    if (e.code === 'KeyW') {
       e.preventDefault();
       rocket.throttleUp = true;
-    } else if (e.code === 'ArrowDown') {
+    } else if (e.code === 'KeyS') {
       e.preventDefault();
       rocket.throttleDown = true;
-    } else if (e.code === 'ArrowLeft') {
+    } else if (e.code === 'KeyA') {
       e.preventDefault();
       rocket.rotateLeft = true;
-    } else if (e.code === 'ArrowRight') {
+    } else if (e.code === 'KeyD') {
       e.preventDefault();
       rocket.rotateRight = true;
     } else if (e.code === 'KeyR') {
@@ -116,16 +134,16 @@
   }
 
   function keyUp(e) {
-    if (e.code === 'ArrowUp' || e.code === 'Space') {
+    if (e.code === 'KeyW') {
       e.preventDefault();
       rocket.throttleUp = false;
-    } else if (e.code === 'ArrowDown') {
+    } else if (e.code === 'KeyS') {
       e.preventDefault();
       rocket.throttleDown = false;
-    } else if (e.code === 'ArrowLeft') {
+    } else if (e.code === 'KeyA') {
       e.preventDefault();
       rocket.rotateLeft = false;
-    } else if (e.code === 'ArrowRight') {
+    } else if (e.code === 'KeyD') {
       e.preventDefault();
       rocket.rotateRight = false;
     }
@@ -137,6 +155,9 @@
     rotationSensitivity = parseFloat(rotationSensitivityEl.value) || 1;
   });
   canvas.addEventListener('wheel', function (e) {
+    if (scene !== 'FLIGHT') {
+      return;
+    }
     e.preventDefault();
     var step = e.deltaY > 0 ? -0.12 : 0.12;
     targetZoom = Math.max(0.3, Math.min(2.5, targetZoom + step));
@@ -150,6 +171,59 @@
       particles.push({ x: rocket.x, y: rocket.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 0.6 + Math.random() * 0.8, size: 2 + Math.random() * 3.5, c: Math.random() > 0.45 ? '#f97316' : '#ef4444' });
     }
   }
+
+  function updateScenePanels() {
+    menuSceneEl.classList.toggle('hidden', scene !== 'MENU');
+    buildSceneEl.classList.toggle('hidden', scene !== 'BUILD');
+    postFlightSceneEl.classList.toggle('hidden', !(scene === 'FLIGHT' && (state === 'READY' || state === 'CRASHED') && readyStatus !== 'Ready'));
+    engineCountEl.textContent = buildConfig.engines;
+    fuelTankCountEl.textContent = buildConfig.fuelTanks;
+    if (state === 'CRASHED') {
+      postFlightTextEl.textContent = 'Crashed';
+    } else {
+      postFlightTextEl.textContent = readyStatus;
+    }
+  }
+
+  function getBuildStats() {
+    return {
+      mass: 1000 + buildConfig.engines * 320 + buildConfig.fuelTanks * 520,
+      thrust: 9000 + buildConfig.engines * 7200,
+      fuel: 30 + buildConfig.fuelTanks * 35
+    };
+  }
+
+  function startFlightFromBuild() {
+    var stats = getBuildStats();
+    rocketMass = stats.mass;
+    thrustForce = stats.thrust;
+    rocket.maxFuel = stats.fuel;
+    scene = 'FLIGHT';
+    targetZoom = 1;
+    resetGame();
+    updateScenePanels();
+  }
+
+  startBuildBtn.addEventListener('click', function () {
+    scene = 'BUILD';
+    updateScenePanels();
+  });
+  addEngineBtn.addEventListener('click', function () {
+    buildConfig.engines = Math.min(6, buildConfig.engines + 1);
+    updateScenePanels();
+  });
+  addFuelBtn.addEventListener('click', function () {
+    buildConfig.fuelTanks = Math.min(8, buildConfig.fuelTanks + 1);
+    updateScenePanels();
+  });
+  launchBtn.addEventListener('click', function () {
+    startFlightFromBuild();
+  });
+  returnBuildBtn.addEventListener('click', function () {
+    scene = 'BUILD';
+    readyStatus = 'Ready';
+    updateScenePanels();
+  });
 
   function updateParticles(dt) {
     var p;
@@ -165,6 +239,9 @@
   }
 
   function update(dt) {
+    if (scene !== 'FLIGHT') {
+      return;
+    }
     updateParticles(dt);
     if (state === 'CRASHED') {
       return;
@@ -251,6 +328,7 @@
 
     camera.x += (rocket.x - camera.x) * 0.1;
     camera.y += (rocket.y - camera.y) * 0.1;
+    updateScenePanels();
   }
 
   function drawBackground() {
@@ -290,6 +368,20 @@
 
     ctx.fillStyle = '#7dd3fc';
     ctx.fillRect(pad.x * PIXELS_PER_METER, pad.y * PIXELS_PER_METER, pad.w * PIXELS_PER_METER, pad.h * PIXELS_PER_METER);
+  }
+
+  function drawBuildPreview() {
+    var cx = canvas.width / 2;
+    var cy = canvas.height * 0.7;
+    var i;
+    ctx.fillStyle = '#64748b';
+    for (i = 0; i < buildConfig.fuelTanks; i += 1) {
+      ctx.fillRect(cx - 22, cy - 24 - i * 18, 44, 16);
+    }
+    ctx.fillStyle = '#334155';
+    for (i = 0; i < buildConfig.engines; i += 1) {
+      ctx.fillRect(cx - (buildConfig.engines * 7) / 2 + i * 7, cy - 6, 6, 10);
+    }
   }
 
   function drawRocket() {
@@ -376,6 +468,18 @@
   }
 
   function render() {
+    if (scene === 'MENU' || scene === 'BUILD') {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+      if (scene === 'BUILD') {
+        drawBuildPreview();
+      }
+      updateHud();
+      updateScenePanels();
+      return;
+    }
+
     zoom += (targetZoom - zoom) * 0.12;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -398,6 +502,7 @@
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     updateHud();
+    updateScenePanels();
   }
 
   var lastTime = performance.now();
@@ -415,5 +520,6 @@
   }
 
   resetGame();
+  updateScenePanels();
   requestAnimationFrame(loop);
 })();
