@@ -26,7 +26,8 @@
   var angularDragCoeff = 0.4; // rad/s damping
 
   var baseRotationAcceleration = 0.9; // rad/s^2
-  var state = 'READY'; // READY | FLYING | LANDED | CRASHED
+  var state = 'READY'; // READY | FLYING | CRASHED
+  var readyStatus = 'Ready';
 
   var rocket = {
     x: WORLD_W_M * 0.5,
@@ -80,7 +81,8 @@
     rocket.onGround = true;
     state = 'READY';
     particles = [];
-    statusEl.textContent = 'Ready';
+    readyStatus = 'Ready';
+    statusEl.textContent = readyStatus;
   }
 
   function normAngleDeg(rad) {
@@ -190,21 +192,6 @@
       rocket.throttle = Math.max(0, rocket.throttle - 0.65 * deltaTime);
     }
 
-    if (state === 'LANDED') {
-      rocket.y = pad.y - rocket.heightM * 0.5;
-      rocket.vy = 0;
-      rocket.vx = 0;
-      rocket.angularVelocity *= 0.85;
-      if (rocket.throttle > 0.12) {
-        state = 'FLYING';
-        statusEl.textContent = 'Flying';
-      } else {
-        camera.x += (rocket.x - camera.x) * 0.1;
-        camera.y += (rocket.y - camera.y) * 0.1;
-        return;
-      }
-    }
-
     // --- Forces (Newtons) ---
     var forceX = 0;
     var forceY = rocketMass * gravity;
@@ -241,9 +228,11 @@
         if (rocket.vy > 0) {
           rocket.vy = 0;
         }
+        rocket.vx = 0;
       }
       if (rocket.throttle > 0 && !touchingGround) {
         state = 'FLYING';
+        readyStatus = 'Ready';
         statusEl.textContent = 'Flying';
       }
     } else if (state === 'FLYING') {
@@ -260,11 +249,13 @@
         var hardLanding = onPad && verticalSpeed > 5 && verticalSpeed <= 13 && horizontalSpeed <= 7 && angleAbs <= 20;
 
         if (safeLanding) {
-          state = 'LANDED';
-          statusEl.textContent = 'Successful Landing';
+          state = 'READY';
+          readyStatus = 'Successful Landing';
+          statusEl.textContent = readyStatus;
         } else if (hardLanding) {
-          state = 'LANDED';
-          statusEl.textContent = 'Hard Landing';
+          state = 'READY';
+          readyStatus = 'Hard Landing';
+          statusEl.textContent = readyStatus;
         } else {
           state = 'CRASHED';
           statusEl.textContent = 'Crashed';
@@ -359,7 +350,7 @@
     ctx.arc(0, -4, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    if (rocket.throttle > 0.05 && rocket.fuel > 0 && state !== 'LANDED') {
+    if (rocket.throttle > 0.05 && rocket.fuel > 0 && state !== 'CRASHED') {
       var flame = 8 + Math.random() * 10 * rocket.throttle;
       ctx.beginPath();
       ctx.moveTo(-4.5, 26);
@@ -407,7 +398,7 @@
     fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
 
     if (state === 'READY') {
-      statusEl.textContent = 'Ready';
+      statusEl.textContent = readyStatus;
     } else if (state === 'FLYING') {
       statusEl.textContent = 'Flying';
     }
