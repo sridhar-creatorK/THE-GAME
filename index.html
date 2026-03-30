@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spaceflight Lander</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <h1>Spaceflight Lander</h1>
+    <p class="help">
+      <kbd>↑</kbd> / <kbd>Space</kbd> Thrust,
+      <kbd>←</kbd><kbd>→</kbd> Rotate,
+      <kbd>R</kbd> Reset
+    </p>
+
+    <section class="hud" aria-live="polite">
+      <div>Altitude: <span id="altitude">0</span> m</div>
+      <div>Fuel: <span id="fuel">100</span>%</div>
+      <div>V-Speed: <span id="vSpeed">0</span> m/s</div>
+      <div>H-Speed: <span id="hSpeed">0</span> m/s</div>
+      <div>Angle: <span id="angle">0</span>°</div>
+      <div>Status: <span id="status">Ready</span></div>
+      <div class="fuel-wrap" aria-label="fuel bar"><div id="fuelBar"></div></div>
+    </section>
+
+    <canvas id="gameCanvas" width="420" height="700" aria-label="Rocket game area"></canvas>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
