@@ -13,13 +13,13 @@
   var GROUND_Y = 1200;
 
   // Physics tuning (control + feel)
-  var gravity = 0.075;
-  var thrustPower = 0.14;
-  var fuelBurnRate = 10;
-  var rotationAcceleration = 0.002;
-  var rotationDamping = 0.95;
-  var maxRotationSpeed = 0.04;
-  var airDamping = 0.999;
+  var gravity = 0.07;
+  var thrustPower = 0.115;
+  var fuelBurnRate = 7;
+  var rotationAcceleration = 0.0015;
+  var rotationDamping = 0.96;
+  var maxRotationSpeed = 0.03;
+  var airDamping = 0.9985;
 
   var rocket = {
     x: WORLD_W * 0.5,
@@ -167,13 +167,17 @@
     }
 
     rocket.angularVelocity *= rotationDamping;
+    if (!rocket.rotateLeft && !rocket.rotateRight) {
+      rocket.angularVelocity *= 0.985;
+      rocket.angle *= 1 - Math.min(0.22, dt * 0.75);
+    }
     rocket.angle += rocket.angularVelocity * dtMs;
 
     // Smooth throttle spool up/down (prevents instant full thrust)
     if (rocket.thrusting && rocket.fuel > 0) {
-      rocket.thrustLevel = Math.min(1, rocket.thrustLevel + dt * 2.2);
+      rocket.thrustLevel = Math.min(1, rocket.thrustLevel + dt * 1.6);
     } else {
-      rocket.thrustLevel = Math.max(0, rocket.thrustLevel - dt * 2.8);
+      rocket.thrustLevel = Math.max(0, rocket.thrustLevel - dt * 2.2);
     }
 
     var ax = 0;
@@ -190,8 +194,14 @@
     rocket.vy += ay * dtMs;
 
     // Stability damping (air resistance)
-    rocket.vx *= Math.pow(airDamping, dtMs);
-    rocket.vy *= Math.pow(airDamping, dtMs);
+    var damping = Math.pow(airDamping, dtMs);
+    rocket.vx *= damping;
+    rocket.vy *= damping;
+
+    if (rocket.thrustLevel < 0.06) {
+      rocket.vx *= 0.992;
+      rocket.vy *= 0.998;
+    }
 
     rocket.x += rocket.vx * dt;
     rocket.y += rocket.vy * dt;
