@@ -1,125 +1,46 @@
-< codex/create-2d-rocket-simulation-game
-:root {
-  color-scheme: dark;
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-}
-
 body {
   margin: 0;
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
+  font-family: Arial, sans-serif;
   background: radial-gradient(circle at top, #111f3a, #05070e 60%);
   color: #e2e8f0;
+  display: flex;
+  justify-content: center;
 }
 
 .app {
-  width: min(92vw, 500px);
+  width: 90%;
+  max-width: 500px;
   text-align: center;
 }
 
 h1 {
-  margin: 0 0 0.6rem;
-  font-size: 1.35rem;
+  font-size: 1.4rem;
 }
 
 .help {
-  margin: 0 0 0.9rem;
-  color: #cbd5e1;
-  line-height: 1.5;
+  margin-bottom: 10px;
 }
 
 kbd {
   border: 1px solid #64748b;
+  padding: 2px 5px;
   border-radius: 4px;
-  padding: 0.1rem 0.3rem;
-  background: #1f2937;
-  font-size: 0.9rem;
-}
-
-.hud {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.4rem;
-  margin-bottom: 0.8rem;
-  text-align: left;
-  padding: 0.75rem;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.78);
-  font-size: 0.95rem;
-}
-
-#gameCanvas {
-  width: 100%;
-  max-width: 420px;
-  border: 2px solid #334155;
-  border-radius: 10px;
-  background: linear-gradient(#030712 0%, #0a1024 70%, #1d3b1f 70%, #152a16 100%);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.35);
-}
-
-:root {
-  color-scheme: dark;
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(#0f172a, #1e293b);
-  color: #e2e8f0;
-}
-
-.app {
-  width: min(92vw, 480px);
-  text-align: center;
-}
-
-h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
-}
-
-.help {
-  margin: 0 0 1rem;
-  color: #cbd5e1;
-}
-
-kbd {
-  border: 1px solid #64748b;
-  border-radius: 4px;
-  padding: 0.15rem 0.35rem;
   background: #1f2937;
 }
 
 .hud {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.35rem;
-  margin-bottom: 0.75rem;
-  text-align: left;
-  padding: 0.7rem;
-  border: 1px solid #334155;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 10px;
+  background: #0f172a;
+  padding: 10px;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.7);
 }
 
 #gameCanvas {
   width: 100%;
-  max-width: 420px;
   border: 2px solid #334155;
   border-radius: 10px;
-  background: linear-gradient(#020617 0%, #0b1020 58%, #2f2f2f 58%, #1f1f1f 100%);
+  background: linear-gradient(#020617 0%, #0b1020 60%, #2f2f2f 60%);
 }
-> main
