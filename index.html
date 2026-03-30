@@ -9,7 +9,7 @@
 <body>
   <main class="app">
     <h1>Spaceflight Simulator Style Lander</h1>
-    <p class="help"><kbd>↑</kbd>/<kbd>Space</kbd> Thrust · <kbd>←</kbd><kbd>→</kbd> Rotate · <kbd>R</kbd> Reset</p>
+    <p class="help"><kbd>↑</kbd>/<kbd>Space</kbd> Throttle+ · <kbd>↓</kbd> Throttle- · <kbd>←</kbd><kbd>→</kbd> Rotate · <kbd>R</kbd> Reset</p>
 
     <div class="game-wrap">
       <section class="hud" aria-live="polite">
@@ -17,6 +17,7 @@
         <div><span>Velocity</span><strong id="velocity">0 m/s</strong></div>
         <div><span>Angle</span><strong id="angle">0°</strong></div>
         <div><span>Status</span><strong id="status">Flying</strong></div>
+        <div><span>Throttle</span><strong id="throttle">0%</strong></div>
         <div class="fuel-row"><span>Fuel</span><strong id="fuel">100%</strong></div>
         <div class="fuel-wrap"><div id="fuelBar"></div></div>
         <div class="sensitivity">

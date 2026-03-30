@@ -6,6 +6,7 @@
   var velocityEl = document.getElementById('velocity');
   var angleEl = document.getElementById('angle');
   var statusEl = document.getElementById('status');
+  var throttleEl = document.getElementById('throttle');
   var fuelEl = document.getElementById('fuel');
   var fuelBarEl = document.getElementById('fuelBar');
   var rotationSensitivityEl = document.getElementById('rotationSensitivity');
@@ -33,11 +34,12 @@
     vy: 0,
     angle: 0,
     angularVelocity: 0,
-    thrustLevel: 0,
+    throttle: 0,
     widthM: 4.6,
     heightM: 14.0,
     fuel: 100,
-    thrusting: false,
+    throttleUp: false,
+    throttleDown: false,
     rotateLeft: false,
     rotateRight: false,
     landed: false,
@@ -67,9 +69,10 @@
     rocket.vy = 0;
     rocket.angle = 0;
     rocket.angularVelocity = 0;
-    rocket.thrustLevel = 0;
+    rocket.throttle = 0;
     rocket.fuel = 100;
-    rocket.thrusting = false;
+    rocket.throttleUp = false;
+    rocket.throttleDown = false;
     rocket.rotateLeft = false;
     rocket.rotateRight = false;
     rocket.landed = false;
@@ -90,7 +93,10 @@
   function keyDown(e) {
     if (e.code === 'ArrowUp' || e.code === 'Space') {
       e.preventDefault();
-      rocket.thrusting = true;
+      rocket.throttleUp = true;
+    } else if (e.code === 'ArrowDown') {
+      e.preventDefault();
+      rocket.throttleDown = true;
     } else if (e.code === 'ArrowLeft') {
       e.preventDefault();
       rocket.rotateLeft = true;
@@ -105,7 +111,10 @@
   function keyUp(e) {
     if (e.code === 'ArrowUp' || e.code === 'Space') {
       e.preventDefault();
-      rocket.thrusting = false;
+      rocket.throttleUp = false;
+    } else if (e.code === 'ArrowDown') {
+      e.preventDefault();
+      rocket.throttleDown = false;
     } else if (e.code === 'ArrowLeft') {
       e.preventDefault();
       rocket.rotateLeft = false;
@@ -171,22 +180,23 @@
     rocket.angularVelocity += -rocket.angularVelocity * angularDragCoeff * deltaTime;
     rocket.angle += rocket.angularVelocity * deltaTime;
 
-    // Smooth thrust ramp (throttle response)
-    if (rocket.thrusting && rocket.fuel > 0) {
-      rocket.thrustLevel = Math.min(1, rocket.thrustLevel + 1.35 * deltaTime);
-    } else {
-      rocket.thrustLevel = Math.max(0, rocket.thrustLevel - 1.9 * deltaTime);
+    // Manual throttle control (0..1), adjusted gradually by keys.
+    if (rocket.throttleUp && rocket.fuel > 0) {
+      rocket.throttle = Math.min(1, rocket.throttle + 0.55 * deltaTime);
+    }
+    if (rocket.throttleDown) {
+      rocket.throttle = Math.max(0, rocket.throttle - 0.65 * deltaTime);
     }
 
     // --- Forces (Newtons) ---
     var forceX = 0;
     var forceY = rocketMass * gravity;
 
-    if (rocket.thrustLevel > 0 && rocket.fuel > 0) {
-      var currentThrust = thrustForce * rocket.thrustLevel;
+    if (rocket.throttle > 0 && rocket.fuel > 0) {
+      var currentThrust = thrustForce * rocket.throttle;
       forceX += Math.sin(rocket.angle) * currentThrust;
       forceY += -Math.cos(rocket.angle) * currentThrust;
-      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * rocket.thrustLevel * deltaTime);
+      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * rocket.throttle * deltaTime);
     }
 
     // Very small drag force opposite velocity
@@ -223,11 +233,17 @@
       var verticalSpeed = Math.abs(rocket.vy);
       var horizontalSpeed = Math.abs(rocket.vx);
       var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
-      var upright = Math.abs(normAngleDeg(rocket.angle)) < 8;
+      var angleAbs = Math.abs(normAngleDeg(rocket.angle));
 
-      if (onPad && verticalSpeed < 5 && horizontalSpeed < 2.5 && upright) {
+      var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 10;
+      var hardLanding = onPad && verticalSpeed < 9 && horizontalSpeed < 6 && angleAbs < 15;
+
+      if (safeLanding) {
         rocket.landed = true;
         statusEl.textContent = 'Successful Landing';
+      } else if (hardLanding) {
+        rocket.landed = true;
+        statusEl.textContent = 'Hard Landing';
       } else {
         rocket.crashed = true;
         statusEl.textContent = 'Crashed';
@@ -237,8 +253,9 @@
       rocket.vx = 0;
       rocket.vy = 0;
       rocket.angularVelocity = 0;
-      rocket.thrustLevel = 0;
-      rocket.thrusting = false;
+      rocket.throttle = 0;
+      rocket.throttleUp = false;
+      rocket.throttleDown = false;
     }
 
     camera.x += (rocket.x - camera.x) * Math.min(1, deltaTime * 4.8);
@@ -325,8 +342,8 @@
     ctx.arc(0, -4, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    if (rocket.thrustLevel > 0.05 && rocket.fuel > 0 && !rocket.landed) {
-      var flame = 8 + Math.random() * 10 * rocket.thrustLevel;
+    if (rocket.throttle > 0.05 && rocket.fuel > 0 && !rocket.landed) {
+      var flame = 8 + Math.random() * 10 * rocket.throttle;
       ctx.beginPath();
       ctx.moveTo(-4.5, 26);
       ctx.lineTo(0, 26 + flame);
@@ -368,6 +385,7 @@
     altitudeEl.textContent = altitude.toFixed(1) + ' m';
     velocityEl.textContent = totalVelocity.toFixed(2) + ' m/s';
     angleEl.textContent = normAngleDeg(rocket.angle).toFixed(1) + '°';
+    throttleEl.textContent = (rocket.throttle * 100).toFixed(0) + '%';
     fuelEl.textContent = rocket.fuel.toFixed(0) + '%';
     fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
 
