@@ -48,8 +48,10 @@
 
   function resize() {
     var rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(rect.width));
-    canvas.height = Math.max(1, Math.floor(rect.height));
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   function setPart(type) {
@@ -244,9 +246,9 @@
   }
 
   function render() {
-    if (mode === 'BUILD' || mode === 'MENU') {
+    if (mode === 'BUILD') {
       drawBuild();
-      modeLabel.textContent = mode === 'BUILD' ? 'BUILD MODE' : 'MENU';
+      modeLabel.textContent = 'BUILD MODE';
     } else {
       drawFlight();
     }
@@ -283,11 +285,10 @@
   });
 
   menuBtn.addEventListener('click', function () {
-    mode = 'MENU';
+    mode = 'BUILD';
   });
   clearBtn.addEventListener('click', clearBuild);
   launchBtn.addEventListener('click', launch);
-  startBuildBtn.addEventListener('click', function () { mode = 'BUILD'; });
 
   document.addEventListener('keydown', function (e) {
     if (e.code === 'KeyB') {
@@ -320,6 +321,7 @@
   });
 
   resize();
+  setPart(selectedPart);
   window.addEventListener('resize', resize);
   requestAnimationFrame(loop);
 })();
