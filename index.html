@@ -19,6 +19,10 @@
         <div><span>Status</span><strong id="status">Flying</strong></div>
         <div class="fuel-row"><span>Fuel</span><strong id="fuel">100%</strong></div>
         <div class="fuel-wrap"><div id="fuelBar"></div></div>
+        <div class="sensitivity">
+          <label for="rotationSensitivity">Rotation Sensitivity</label>
+          <input id="rotationSensitivity" type="range" min="0.5" max="1.5" step="0.05" value="1" />
+        </div>
       </section>
 
       <canvas id="gameCanvas" width="420" height="700" aria-label="Spaceflight lander game"></canvas>

@@ -8,6 +8,7 @@
   var statusEl = document.getElementById('status');
   var fuelEl = document.getElementById('fuel');
   var fuelBarEl = document.getElementById('fuelBar');
+  var rotationSensitivityEl = document.getElementById('rotationSensitivity');
 
   var WORLD_W = 900;
   var GROUND_Y = 1200;
@@ -20,6 +21,7 @@
   var rotationDamping = 0.96;
   var maxRotationSpeed = 0.03;
   var airDamping = 0.9985;
+  var rotationSensitivity = 1;
 
   var rocket = {
     x: WORLD_W * 0.5,
@@ -111,6 +113,9 @@
 
   document.addEventListener('keydown', keyDown);
   document.addEventListener('keyup', keyUp);
+  rotationSensitivityEl.addEventListener('input', function () {
+    rotationSensitivity = parseFloat(rotationSensitivityEl.value) || 1;
+  });
 
   function spawnExplosion() {
     var p;
@@ -153,17 +158,20 @@
     var dtMs = dt * 1000;
 
     // Heavy, damped rotation using angular velocity.
+    var effectiveRotationAccel = rotationAcceleration * rotationSensitivity;
+    var effectiveMaxRotationSpeed = maxRotationSpeed * rotationSensitivity;
+
     if (rocket.rotateLeft) {
-      rocket.angularVelocity -= rotationAcceleration * dtMs;
+      rocket.angularVelocity -= effectiveRotationAccel * dtMs;
     }
     if (rocket.rotateRight) {
-      rocket.angularVelocity += rotationAcceleration * dtMs;
+      rocket.angularVelocity += effectiveRotationAccel * dtMs;
     }
 
-    if (rocket.angularVelocity > maxRotationSpeed) {
-      rocket.angularVelocity = maxRotationSpeed;
-    } else if (rocket.angularVelocity < -maxRotationSpeed) {
-      rocket.angularVelocity = -maxRotationSpeed;
+    if (rocket.angularVelocity > effectiveMaxRotationSpeed) {
+      rocket.angularVelocity = effectiveMaxRotationSpeed;
+    } else if (rocket.angularVelocity < -effectiveMaxRotationSpeed) {
+      rocket.angularVelocity = -effectiveMaxRotationSpeed;
     }
 
     rocket.angularVelocity *= rotationDamping;

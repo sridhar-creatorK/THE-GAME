@@ -81,3 +81,20 @@ kbd {
   background: linear-gradient(90deg, #ef4444, #f59e0b 45%, #22c55e 100%);
   transition: width 80ms linear;
 }
+
+.sensitivity {
+  margin-top: 0.25rem;
+  display: grid !important;
+  gap: 0.3rem;
+}
+
+.sensitivity label {
+  color: #94a3b8;
+  font-size: 0.73rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sensitivity input[type='range'] {
+  width: 100%;
+}
