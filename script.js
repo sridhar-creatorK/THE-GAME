@@ -12,15 +12,11 @@
   var rotationSensitivityEl = document.getElementById('rotationSensitivity');
   var menuSceneEl = document.getElementById('menuScene');
   var buildSceneEl = document.getElementById('buildScene');
-  var postFlightSceneEl = document.getElementById('postFlightScene');
-  var postFlightTextEl = document.getElementById('postFlightText');
   var startBuildBtn = document.getElementById('startBuildBtn');
-  var addEngineBtn = document.getElementById('addEngineBtn');
-  var addFuelBtn = document.getElementById('addFuelBtn');
+  var selectEngineBtn = document.getElementById('selectEngineBtn');
+  var selectTankBtn = document.getElementById('selectTankBtn');
+  var selectSolarBtn = document.getElementById('selectSolarBtn');
   var launchBtn = document.getElementById('launchBtn');
-  var returnBuildBtn = document.getElementById('returnBuildBtn');
-  var engineCountEl = document.getElementById('engineCount');
-  var fuelTankCountEl = document.getElementById('fuelTankCount');
 
   var PIXELS_PER_METER = 5.2;
   var WORLD_W_M = 170;
@@ -39,10 +35,13 @@
   var readyStatus = 'Ready';
   var scene = 'MENU'; // MENU | BUILD | FLIGHT
 
-  var buildConfig = {
-    engines: 1,
-    fuelTanks: 1
+  var PART_DEFS = {
+    engine: { type: 'engine', width: 7, height: 6, mass: 380, thrust: 8200, fuel: 0, color: '#f97316' },
+    tank: { type: 'tank', width: 9, height: 10, mass: 620, thrust: 0, fuel: 45, color: '#64748b' },
+    solar: { type: 'solar', width: 12, height: 4, mass: 140, thrust: 0, fuel: 0, color: '#22d3ee' }
   };
+  var selectedPartType = 'tank';
+  var buildParts = [];
 
   var rocket = {
     x: WORLD_W_M * 0.5,
@@ -116,6 +115,18 @@
   }
 
   function keyDown(e) {
+    if (e.code === 'KeyB') {
+      scene = 'BUILD';
+      updateScenePanels();
+      return;
+    }
+    if (e.code === 'KeyC') {
+      if (scene !== 'MENU') {
+        scene = 'FLIGHT';
+        updateScenePanels();
+      }
+      return;
+    }
     if (e.code === 'KeyW') {
       e.preventDefault();
       rocket.throttleUp = true;
@@ -175,21 +186,44 @@
   function updateScenePanels() {
     menuSceneEl.classList.toggle('hidden', scene !== 'MENU');
     buildSceneEl.classList.toggle('hidden', scene !== 'BUILD');
-    postFlightSceneEl.classList.toggle('hidden', !(scene === 'FLIGHT' && (state === 'READY' || state === 'CRASHED') && readyStatus !== 'Ready'));
-    engineCountEl.textContent = buildConfig.engines;
-    fuelTankCountEl.textContent = buildConfig.fuelTanks;
-    if (state === 'CRASHED') {
-      postFlightTextEl.textContent = 'Crashed';
+    selectEngineBtn.classList.toggle('active', selectedPartType === 'engine');
+    selectTankBtn.classList.toggle('active', selectedPartType === 'tank');
+    selectSolarBtn.classList.toggle('active', selectedPartType === 'solar');
+  }
+
+  function resetBuildParts() {
+    buildParts = [];
+    placePart('engine');
+    placePart('tank');
+  }
+
+  function placePart(type) {
+    var def = PART_DEFS[type];
+    var baseX = WORLD_W_M * 0.5;
+    var y;
+    if (buildParts.length === 0) {
+      y = getGroundY(baseX) - def.height * 0.5;
     } else {
-      postFlightTextEl.textContent = readyStatus;
+      var top = buildParts[buildParts.length - 1];
+      y = top.y - top.def.height * 0.5 - def.height * 0.5;
     }
+    buildParts.push({ type: type, def: def, x: baseX, y: y });
   }
 
   function getBuildStats() {
+    var mass = 1000;
+    var thrust = 0;
+    var fuel = 15;
+    var p;
+    for (p = 0; p < buildParts.length; p += 1) {
+      mass += buildParts[p].def.mass;
+      thrust += buildParts[p].def.thrust;
+      fuel += buildParts[p].def.fuel;
+    }
     return {
-      mass: 1000 + buildConfig.engines * 320 + buildConfig.fuelTanks * 520,
-      thrust: 9000 + buildConfig.engines * 7200,
-      fuel: 30 + buildConfig.fuelTanks * 35
+      mass: mass,
+      thrust: Math.max(5000, thrust),
+      fuel: Math.max(15, fuel)
     };
   }
 
@@ -208,21 +242,29 @@
     scene = 'BUILD';
     updateScenePanels();
   });
-  addEngineBtn.addEventListener('click', function () {
-    buildConfig.engines = Math.min(6, buildConfig.engines + 1);
+  selectEngineBtn.addEventListener('click', function () {
+    selectedPartType = 'engine';
     updateScenePanels();
   });
-  addFuelBtn.addEventListener('click', function () {
-    buildConfig.fuelTanks = Math.min(8, buildConfig.fuelTanks + 1);
+  selectTankBtn.addEventListener('click', function () {
+    selectedPartType = 'tank';
+    updateScenePanels();
+  });
+  selectSolarBtn.addEventListener('click', function () {
+    selectedPartType = 'solar';
     updateScenePanels();
   });
   launchBtn.addEventListener('click', function () {
     startFlightFromBuild();
   });
-  returnBuildBtn.addEventListener('click', function () {
-    scene = 'BUILD';
-    readyStatus = 'Ready';
-    updateScenePanels();
+  canvas.addEventListener('click', function () {
+    if (scene === 'BUILD') {
+      placePart(selectedPartType);
+      updateScenePanels();
+    } else if (scene === 'MENU') {
+      scene = 'BUILD';
+      updateScenePanels();
+    }
   });
 
   function updateParticles(dt) {
@@ -371,16 +413,13 @@
   }
 
   function drawBuildPreview() {
-    var cx = canvas.width / 2;
-    var cy = canvas.height * 0.7;
     var i;
-    ctx.fillStyle = '#64748b';
-    for (i = 0; i < buildConfig.fuelTanks; i += 1) {
-      ctx.fillRect(cx - 22, cy - 24 - i * 18, 44, 16);
-    }
-    ctx.fillStyle = '#334155';
-    for (i = 0; i < buildConfig.engines; i += 1) {
-      ctx.fillRect(cx - (buildConfig.engines * 7) / 2 + i * 7, cy - 6, 6, 10);
+    for (i = 0; i < buildParts.length; i += 1) {
+      var p = buildParts[i];
+      var x = canvas.width / 2 + (p.x - WORLD_W_M * 0.5) * 2.5;
+      var y = canvas.height * 0.86 - (buildParts.length - 1 - i) * 18;
+      ctx.fillStyle = p.def.color;
+      ctx.fillRect(x - p.def.width * 2, y - p.def.height * 1.2, p.def.width * 4, p.def.height * 2.4);
     }
   }
 
@@ -519,6 +558,7 @@
     requestAnimationFrame(loop);
   }
 
+  resetBuildParts();
   resetGame();
   updateScenePanels();
   requestAnimationFrame(loop);

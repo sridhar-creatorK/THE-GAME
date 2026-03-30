@@ -65,6 +65,10 @@ kbd {
   border-radius: 8px;
   cursor: pointer;
 }
+.scene-panel button.active {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8 inset;
+}
 
 .build-actions {
   display: flex;

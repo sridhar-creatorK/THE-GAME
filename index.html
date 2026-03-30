@@ -9,7 +9,7 @@
 <body>
   <main class="app">
     <h1>Spaceflight Simulator Style Lander</h1>
-    <p class="help"><kbd>W</kbd> Throttle+ · <kbd>S</kbd> Throttle- · <kbd>A</kbd><kbd>D</kbd> Rotate · <kbd>R</kbd> Reset</p>
+    <p class="help"><kbd>W</kbd> Throttle+ · <kbd>S</kbd> Throttle- · <kbd>A</kbd><kbd>D</kbd> Rotate · <kbd>R</kbd> Reset · <kbd>B</kbd> Build · <kbd>C</kbd> Continue</p>
 
     <div class="game-wrap">
       <section class="hud" aria-live="polite">
@@ -35,17 +35,13 @@
 
       <div id="buildScene" class="scene-panel hidden">
         <h2>Build Rocket</h2>
-        <p>Engines: <span id="engineCount">1</span> · Fuel Tanks: <span id="fuelTankCount">1</span></p>
+        <p>Select a part, then click in build area to place (snaps vertically).</p>
         <div class="build-actions">
-          <button id="addEngineBtn">+ Engine</button>
-          <button id="addFuelBtn">+ Fuel Tank</button>
+          <button id="selectEngineBtn">Engine</button>
+          <button id="selectTankBtn">Tank</button>
+          <button id="selectSolarBtn">Solar</button>
           <button id="launchBtn">Launch</button>
         </div>
-      </div>
-
-      <div id="postFlightScene" class="scene-panel hidden">
-        <h2 id="postFlightText">Flight Complete</h2>
-        <button id="returnBuildBtn">Return to Build</button>
       </div>
     </div>
   </main>
