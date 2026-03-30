@@ -190,6 +190,21 @@
       rocket.throttle = Math.max(0, rocket.throttle - 0.65 * deltaTime);
     }
 
+    if (state === 'LANDED') {
+      rocket.y = pad.y - rocket.heightM * 0.5;
+      rocket.vy = 0;
+      rocket.vx = 0;
+      rocket.angularVelocity *= 0.85;
+      if (rocket.throttle > 0.12) {
+        state = 'FLYING';
+        statusEl.textContent = 'Flying';
+      } else {
+        camera.x += (rocket.x - camera.x) * 0.1;
+        camera.y += (rocket.y - camera.y) * 0.1;
+        return;
+      }
+    }
+
     // --- Forces (Newtons) ---
     var forceX = 0;
     var forceY = rocketMass * gravity;
@@ -228,14 +243,6 @@
         }
       }
       if (rocket.throttle > 0 && !touchingGround) {
-        state = 'FLYING';
-        statusEl.textContent = 'Flying';
-      }
-    } else if (state === 'LANDED') {
-      rocket.y = pad.y - rocket.heightM * 0.5;
-      rocket.vy = 0;
-      rocket.angularVelocity *= 0.85;
-      if (rocket.throttle > 0.12) {
         state = 'FLYING';
         statusEl.textContent = 'Flying';
       }
