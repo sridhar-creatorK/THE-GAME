@@ -10,29 +10,32 @@
   var fuelBarEl = document.getElementById('fuelBar');
   var rotationSensitivityEl = document.getElementById('rotationSensitivity');
 
-  var WORLD_W = 900;
-  var GROUND_Y = 1200;
+  // --- Real-world-style units ---
+  // Internal simulation uses meters, seconds, kg, Newtons, radians.
+  var PIXELS_PER_METER = 5.2;
+  var WORLD_W_M = 170;
+  var GROUND_Y_M = 240;
 
-  // Physics tuning (control + feel)
-  var gravity = 0.07;
-  var thrustPower = 0.115;
-  var fuelBurnRate = 7;
-  var rotationAcceleration = 0.0015;
-  var rotationDamping = 0.96;
-  var maxRotationSpeed = 0.03;
-  var airDamping = 0.9985;
-  var rotationSensitivity = 1;
+  var gravity = 9.81; // m/s^2
+  var rocketMass = 1200; // kg
+  var thrustForce = 16500; // N
+  var fuelBurnRate = 0.55; // % per second at full throttle
+
+  var linearDragCoeff = 0.018; // small, intentional damping
+  var angularDragCoeff = 1.2; // rad/s damping
+
+  var baseRotationAcceleration = 0.9; // rad/s^2
 
   var rocket = {
-    x: WORLD_W * 0.5,
-    y: 220,
+    x: WORLD_W_M * 0.5,
+    y: 45,
     vx: 0,
     vy: 0,
     angle: 0,
     angularVelocity: 0,
     thrustLevel: 0,
-    width: 24,
-    height: 74,
+    widthM: 4.6,
+    heightM: 14.0,
     fuel: 100,
     thrusting: false,
     rotateLeft: false,
@@ -41,24 +44,25 @@
     crashed: false
   };
 
-  var pad = { x: WORLD_W * 0.5 - 70, y: GROUND_Y - 8, w: 140, h: 8 };
+  var pad = { x: WORLD_W_M * 0.5 - 12, y: GROUND_Y_M - 1.2, w: 24, h: 1.2 };
   var camera = { x: rocket.x, y: rocket.y };
   var stars = [];
   var particles = [];
-  var i;
+  var rotationSensitivity = 1;
 
+  var i;
   for (i = 0; i < 150; i += 1) {
     stars.push({
-      x: Math.random() * WORLD_W,
-      y: Math.random() * (GROUND_Y - 120),
+      x: Math.random() * WORLD_W_M,
+      y: Math.random() * (GROUND_Y_M - 30),
       r: 0.5 + Math.random() * 1.3,
       a: 0.25 + Math.random() * 0.6
     });
   }
 
   function resetGame() {
-    rocket.x = WORLD_W * 0.5;
-    rocket.y = 220;
+    rocket.x = WORLD_W_M * 0.5;
+    rocket.y = 45;
     rocket.vx = 0;
     rocket.vy = 0;
     rocket.angle = 0;
@@ -121,7 +125,7 @@
     var p;
     for (p = 0; p < 45; p += 1) {
       var a = Math.random() * Math.PI * 2;
-      var speed = 35 + Math.random() * 220;
+      var speed = 10 + Math.random() * 45; // m/s
       particles.push({
         x: rocket.x,
         y: rocket.y,
@@ -134,102 +138,94 @@
     }
   }
 
-  function updateParticles(dt) {
+  function updateParticles(deltaTime) {
     var p;
     for (p = particles.length - 1; p >= 0; p -= 1) {
-      particles[p].life -= dt;
-      particles[p].x += particles[p].vx * dt;
-      particles[p].y += particles[p].vy * dt;
-      particles[p].vy += 25 * dt;
-      particles[p].vx *= 0.988;
+      particles[p].life -= deltaTime;
+      particles[p].x += particles[p].vx * deltaTime;
+      particles[p].y += particles[p].vy * deltaTime;
+      particles[p].vy += gravity * 0.45 * deltaTime;
       if (particles[p].life <= 0) {
         particles.splice(p, 1);
       }
     }
   }
 
-  function update(dt) {
-    updateParticles(dt);
+  function update(deltaTime) {
+    updateParticles(deltaTime);
 
     if (rocket.landed || rocket.crashed) {
       return;
     }
 
-    var dtMs = dt * 1000;
-
-    // Heavy, damped rotation using angular velocity.
-    var effectiveRotationAccel = rotationAcceleration * rotationSensitivity;
-    var effectiveMaxRotationSpeed = maxRotationSpeed * rotationSensitivity;
-
+    // --- Rotation dynamics (rad/s, rad/s^2) ---
+    var rotationAccel = baseRotationAcceleration * rotationSensitivity;
     if (rocket.rotateLeft) {
-      rocket.angularVelocity -= effectiveRotationAccel * dtMs;
+      rocket.angularVelocity -= rotationAccel * deltaTime;
     }
     if (rocket.rotateRight) {
-      rocket.angularVelocity += effectiveRotationAccel * dtMs;
+      rocket.angularVelocity += rotationAccel * deltaTime;
     }
 
-    if (rocket.angularVelocity > effectiveMaxRotationSpeed) {
-      rocket.angularVelocity = effectiveMaxRotationSpeed;
-    } else if (rocket.angularVelocity < -effectiveMaxRotationSpeed) {
-      rocket.angularVelocity = -effectiveMaxRotationSpeed;
-    }
+    // intentional small damping only
+    rocket.angularVelocity += -rocket.angularVelocity * angularDragCoeff * deltaTime;
+    rocket.angle += rocket.angularVelocity * deltaTime;
 
-    rocket.angularVelocity *= rotationDamping;
-    if (!rocket.rotateLeft && !rocket.rotateRight) {
-      rocket.angularVelocity *= 0.985;
-      rocket.angle *= 1 - Math.min(0.22, dt * 0.75);
-    }
-    rocket.angle += rocket.angularVelocity * dtMs;
-
-    // Smooth throttle spool up/down (prevents instant full thrust)
+    // Smooth thrust ramp (throttle response)
     if (rocket.thrusting && rocket.fuel > 0) {
-      rocket.thrustLevel = Math.min(1, rocket.thrustLevel + dt * 1.6);
+      rocket.thrustLevel = Math.min(1, rocket.thrustLevel + 1.35 * deltaTime);
     } else {
-      rocket.thrustLevel = Math.max(0, rocket.thrustLevel - dt * 2.2);
+      rocket.thrustLevel = Math.max(0, rocket.thrustLevel - 1.9 * deltaTime);
     }
 
-    var ax = 0;
-    var ay = gravity;
+    // --- Forces (Newtons) ---
+    var forceX = 0;
+    var forceY = rocketMass * gravity;
 
     if (rocket.thrustLevel > 0 && rocket.fuel > 0) {
-      var thrust = thrustPower * rocket.thrustLevel;
-      ax += Math.sin(rocket.angle) * thrust;
-      ay -= Math.cos(rocket.angle) * thrust;
-      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * dt * rocket.thrustLevel);
+      var currentThrust = thrustForce * rocket.thrustLevel;
+      forceX += Math.sin(rocket.angle) * currentThrust;
+      forceY += -Math.cos(rocket.angle) * currentThrust;
+      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * rocket.thrustLevel * deltaTime);
     }
 
-    rocket.vx += ax * dtMs;
-    rocket.vy += ay * dtMs;
+    // Very small drag force opposite velocity
+    forceX += -linearDragCoeff * rocket.vx;
+    forceY += -linearDragCoeff * rocket.vy;
 
-    // Stability damping (air resistance)
-    var damping = Math.pow(airDamping, dtMs);
-    rocket.vx *= damping;
-    rocket.vy *= damping;
+    // acceleration = force / mass
+    var ax = forceX / rocketMass;
+    var ay = forceY / rocketMass;
 
-    if (rocket.thrustLevel < 0.06) {
-      rocket.vx *= 0.992;
-      rocket.vy *= 0.998;
-    }
+    // velocity += acceleration * dt
+    rocket.vx += ax * deltaTime;
+    rocket.vy += ay * deltaTime;
 
-    rocket.x += rocket.vx * dt;
-    rocket.y += rocket.vy * dt;
+    // position += velocity * dt
+    rocket.x += rocket.vx * deltaTime;
+    rocket.y += rocket.vy * deltaTime;
 
-    if (rocket.x < rocket.width * 0.5) {
-      rocket.x = rocket.width * 0.5;
+    // Side boundaries: constrain position only (no velocity cap)
+    var halfW = rocket.widthM * 0.5;
+    if (rocket.x < halfW) {
+      rocket.x = halfW;
       rocket.vx = 0;
-    } else if (rocket.x > WORLD_W - rocket.width * 0.5) {
-      rocket.x = WORLD_W - rocket.width * 0.5;
+    } else if (rocket.x > WORLD_W_M - halfW) {
+      rocket.x = WORLD_W_M - halfW;
       rocket.vx = 0;
     }
 
-    var bottom = rocket.y + rocket.height * 0.5;
+    // Landing / crash logic based on real velocities
+    var bottom = rocket.y + rocket.heightM * 0.5;
     if (bottom >= pad.y) {
-      rocket.y = pad.y - rocket.height * 0.5;
-      var speed = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
+      rocket.y = pad.y - rocket.heightM * 0.5;
+
+      var verticalSpeed = Math.abs(rocket.vy);
+      var horizontalSpeed = Math.abs(rocket.vx);
       var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
       var upright = Math.abs(normAngleDeg(rocket.angle)) < 8;
 
-      if (onPad && speed < 26 && upright) {
+      if (onPad && verticalSpeed < 5 && horizontalSpeed < 2.5 && upright) {
         rocket.landed = true;
         statusEl.textContent = 'Successful Landing';
       } else {
@@ -241,20 +237,20 @@
       rocket.vx = 0;
       rocket.vy = 0;
       rocket.angularVelocity = 0;
-      rocket.thrusting = false;
       rocket.thrustLevel = 0;
+      rocket.thrusting = false;
     }
 
-    camera.x += (rocket.x - camera.x) * 0.08;
-    camera.y += (rocket.y - camera.y) * 0.08;
+    camera.x += (rocket.x - camera.x) * Math.min(1, deltaTime * 4.8);
+    camera.y += (rocket.y - camera.y) * Math.min(1, deltaTime * 4.8);
   }
 
-  function worldToScreenX(x) {
-    return x - camera.x + canvas.width / 2;
+  function worldToScreenX(xMeters) {
+    return (xMeters - camera.x) * PIXELS_PER_METER + canvas.width / 2;
   }
 
-  function worldToScreenY(y) {
-    return y - camera.y + canvas.height / 2;
+  function worldToScreenY(yMeters) {
+    return (yMeters - camera.y) * PIXELS_PER_METER + canvas.height / 2;
   }
 
   function drawBackground() {
@@ -280,7 +276,7 @@
   }
 
   function drawWorld() {
-    var gy = worldToScreenY(GROUND_Y);
+    var gy = worldToScreenY(GROUND_Y_M);
     var py = worldToScreenY(pad.y);
 
     ctx.fillStyle = '#2b4d2a';
@@ -288,7 +284,7 @@
 
     var px = worldToScreenX(pad.x);
     ctx.fillStyle = '#7dd3fc';
-    ctx.fillRect(px, py, pad.w, pad.h);
+    ctx.fillRect(px, py, pad.w * PIXELS_PER_METER, pad.h * PIXELS_PER_METER);
   }
 
   function drawRocket() {
@@ -366,11 +362,11 @@
   }
 
   function updateHud() {
-    var altitude = Math.max(0, GROUND_Y - (rocket.y + rocket.height * 0.5));
-    var velocity = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
+    var altitude = Math.max(0, GROUND_Y_M - (rocket.y + rocket.heightM * 0.5));
+    var totalVelocity = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
 
-    altitudeEl.textContent = altitude.toFixed(0) + ' m';
-    velocityEl.textContent = velocity.toFixed(1) + ' m/s';
+    altitudeEl.textContent = altitude.toFixed(1) + ' m';
+    velocityEl.textContent = totalVelocity.toFixed(2) + ' m/s';
     angleEl.textContent = normAngleDeg(rocket.angle).toFixed(1) + '°';
     fuelEl.textContent = rocket.fuel.toFixed(0) + '%';
     fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
@@ -388,12 +384,15 @@
     updateHud();
   }
 
-  var last = performance.now();
-  function loop(now) {
-    var dt = Math.min((now - last) / 1000, 0.033);
-    last = now;
+  var lastTime = performance.now();
+  function loop(currentTime) {
+    var deltaTime = (currentTime - lastTime) / 1000;
+    if (deltaTime > 0.033) {
+      deltaTime = 0.033;
+    }
+    lastTime = currentTime;
 
-    update(dt);
+    update(deltaTime);
     render();
 
     requestAnimationFrame(loop);
