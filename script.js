@@ -11,11 +11,15 @@
 
   var WORLD_W = 900;
   var GROUND_Y = 1200;
-  var gravity = 84;
-  var thrustPower = 205;
-  var fuelBurn = 16;
-  var linearDamping = 0.992;
-  var angularDamping = 0.93;
+
+  // Physics tuning (control + feel)
+  var gravity = 0.075;
+  var thrustPower = 0.14;
+  var fuelBurnRate = 10;
+  var rotationAcceleration = 0.002;
+  var rotationDamping = 0.95;
+  var maxRotationSpeed = 0.04;
+  var airDamping = 0.999;
 
   var rocket = {
     x: WORLD_W * 0.5,
@@ -24,6 +28,7 @@
     vy: 0,
     angle: 0,
     angularVelocity: 0,
+    thrustLevel: 0,
     width: 24,
     height: 74,
     fuel: 100,
@@ -56,6 +61,7 @@
     rocket.vy = 0;
     rocket.angle = 0;
     rocket.angularVelocity = 0;
+    rocket.thrustLevel = 0;
     rocket.fuel = 100;
     rocket.thrusting = false;
     rocket.rotateLeft = false;
@@ -66,8 +72,9 @@
     statusEl.textContent = 'Flying';
   }
 
-  function normAngle(a) {
-    var n = ((a % 360) + 360) % 360;
+  function normAngleDeg(rad) {
+    var deg = (rad * 180) / Math.PI;
+    var n = ((deg % 360) + 360) % 360;
     if (n > 180) {
       n -= 360;
     }
@@ -128,7 +135,7 @@
       particles[p].life -= dt;
       particles[p].x += particles[p].vx * dt;
       particles[p].y += particles[p].vy * dt;
-      particles[p].vy += gravity * 0.25 * dt;
+      particles[p].vy += 25 * dt;
       particles[p].vx *= 0.988;
       if (particles[p].life <= 0) {
         particles.splice(p, 1);
@@ -143,31 +150,48 @@
       return;
     }
 
+    var dtMs = dt * 1000;
+
+    // Heavy, damped rotation using angular velocity.
     if (rocket.rotateLeft) {
-      rocket.angularVelocity -= 155 * dt;
+      rocket.angularVelocity -= rotationAcceleration * dtMs;
     }
     if (rocket.rotateRight) {
-      rocket.angularVelocity += 155 * dt;
+      rocket.angularVelocity += rotationAcceleration * dtMs;
     }
 
-    rocket.angularVelocity *= angularDamping;
-    rocket.angle += rocket.angularVelocity;
+    if (rocket.angularVelocity > maxRotationSpeed) {
+      rocket.angularVelocity = maxRotationSpeed;
+    } else if (rocket.angularVelocity < -maxRotationSpeed) {
+      rocket.angularVelocity = -maxRotationSpeed;
+    }
+
+    rocket.angularVelocity *= rotationDamping;
+    rocket.angle += rocket.angularVelocity * dtMs;
+
+    // Smooth throttle spool up/down (prevents instant full thrust)
+    if (rocket.thrusting && rocket.fuel > 0) {
+      rocket.thrustLevel = Math.min(1, rocket.thrustLevel + dt * 2.2);
+    } else {
+      rocket.thrustLevel = Math.max(0, rocket.thrustLevel - dt * 2.8);
+    }
 
     var ax = 0;
     var ay = gravity;
 
-    if (rocket.thrusting && rocket.fuel > 0) {
-      var rad = (rocket.angle * Math.PI) / 180;
-      ax += Math.sin(rad) * thrustPower;
-      ay -= Math.cos(rad) * thrustPower;
-      rocket.fuel = Math.max(0, rocket.fuel - fuelBurn * dt);
+    if (rocket.thrustLevel > 0 && rocket.fuel > 0) {
+      var thrust = thrustPower * rocket.thrustLevel;
+      ax += Math.sin(rocket.angle) * thrust;
+      ay -= Math.cos(rocket.angle) * thrust;
+      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * dt * rocket.thrustLevel);
     }
 
-    rocket.vx += ax * dt;
-    rocket.vy += ay * dt;
+    rocket.vx += ax * dtMs;
+    rocket.vy += ay * dtMs;
 
-    rocket.vx *= linearDamping;
-    rocket.vy *= linearDamping;
+    // Stability damping (air resistance)
+    rocket.vx *= Math.pow(airDamping, dtMs);
+    rocket.vy *= Math.pow(airDamping, dtMs);
 
     rocket.x += rocket.vx * dt;
     rocket.y += rocket.vy * dt;
@@ -185,7 +209,7 @@
       rocket.y = pad.y - rocket.height * 0.5;
       var speed = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
       var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
-      var upright = Math.abs(normAngle(rocket.angle)) < 8;
+      var upright = Math.abs(normAngleDeg(rocket.angle)) < 8;
 
       if (onPad && speed < 26 && upright) {
         rocket.landed = true;
@@ -200,9 +224,9 @@
       rocket.vy = 0;
       rocket.angularVelocity = 0;
       rocket.thrusting = false;
+      rocket.thrustLevel = 0;
     }
 
-    // smooth camera follow (keep rocket near center)
     camera.x += (rocket.x - camera.x) * 0.08;
     camera.y += (rocket.y - camera.y) * 0.08;
   }
@@ -259,7 +283,7 @@
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate((rocket.angle * Math.PI) / 180);
+    ctx.rotate(rocket.angle);
 
     var scale = 1.25;
     ctx.scale(scale, scale);
@@ -287,8 +311,8 @@
     ctx.arc(0, -4, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    if (rocket.thrusting && rocket.fuel > 0 && !rocket.landed) {
-      var flame = 9 + Math.random() * 12;
+    if (rocket.thrustLevel > 0.05 && rocket.fuel > 0 && !rocket.landed) {
+      var flame = 8 + Math.random() * 10 * rocket.thrustLevel;
       ctx.beginPath();
       ctx.moveTo(-4.5, 26);
       ctx.lineTo(0, 26 + flame);
@@ -299,7 +323,7 @@
 
       ctx.beginPath();
       ctx.moveTo(-2.3, 26);
-      ctx.lineTo(0, 24 + flame * 0.65);
+      ctx.lineTo(0, 24 + flame * 0.6);
       ctx.lineTo(2.3, 26);
       ctx.closePath();
       ctx.fillStyle = '#fde68a';
@@ -329,7 +353,7 @@
 
     altitudeEl.textContent = altitude.toFixed(0) + ' m';
     velocityEl.textContent = velocity.toFixed(1) + ' m/s';
-    angleEl.textContent = normAngle(rocket.angle).toFixed(1) + '°';
+    angleEl.textContent = normAngleDeg(rocket.angle).toFixed(1) + '°';
     fuelEl.textContent = rocket.fuel.toFixed(0) + '%';
     fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
 
