@@ -11,21 +11,19 @@
   var fuelBarEl = document.getElementById('fuelBar');
   var rotationSensitivityEl = document.getElementById('rotationSensitivity');
 
-  // --- Real-world-style units ---
-  // Internal simulation uses meters, seconds, kg, Newtons, radians.
   var PIXELS_PER_METER = 5.2;
   var WORLD_W_M = 170;
   var GROUND_Y_M = 240;
 
-  var gravity = 9.81; // m/s^2
-  var rocketMass = 1800; // kg
-  var thrustForce = 22000; // N
-  var fuelBurnRate = 0.55; // % per second at full throttle
+  var gravity = 9.81;
+  var rocketMass = 1800;
+  var thrustForce = 22000;
+  var fuelBurnRate = 0.55;
 
-  var linearDragCoeff = 0.01; // very small, intentional damping
-  var angularDragCoeff = 0.4; // rad/s damping
+  var linearDragCoeff = 0.01;
+  var angularDragCoeff = 0.4;
+  var baseRotationAcceleration = 0.9;
 
-  var baseRotationAcceleration = 0.9; // rad/s^2
   var state = 'READY'; // READY | FLYING | CRASHED
   var readyStatus = 'Ready';
 
@@ -38,13 +36,12 @@
     angularVelocity: 0,
     throttle: 0,
     widthM: 4.6,
-    heightM: 14.0,
+    heightM: 14,
     fuel: 100,
     throttleUp: false,
     throttleDown: false,
     rotateLeft: false,
-    rotateRight: false,
-    onGround: true
+    rotateRight: false
   };
 
   var pad = { x: WORLD_W_M * 0.5 - 12, y: GROUND_Y_M - 1.2, w: 24, h: 1.2 };
@@ -53,6 +50,7 @@
   var particles = [];
   var rotationSensitivity = 1;
   var zoom = 1;
+  var targetZoom = 1;
 
   var i;
   for (i = 0; i < 150; i += 1) {
@@ -64,10 +62,16 @@
     });
   }
 
+  function getGroundY(x) {
+    if (x >= pad.x && x <= pad.x + pad.w) {
+      return pad.y;
+    }
+    return GROUND_Y_M + Math.sin(x * 0.08) * 2.2 + Math.sin(x * 0.027) * 4.8 + Math.sin(x * 0.19) * 0.7;
+  }
+
   function resetGame() {
-    var groundY = pad.y - rocket.heightM * 0.5;
     rocket.x = WORLD_W_M * 0.5;
-    rocket.y = groundY;
+    rocket.y = getGroundY(rocket.x) - rocket.heightM * 0.5;
     rocket.vx = 0;
     rocket.vy = 0;
     rocket.angle = 0;
@@ -78,10 +82,9 @@
     rocket.throttleDown = false;
     rocket.rotateLeft = false;
     rocket.rotateRight = false;
-    rocket.onGround = true;
     state = 'READY';
-    particles = [];
     readyStatus = 'Ready';
+    particles = [];
     statusEl.textContent = readyStatus;
   }
 
@@ -133,98 +136,81 @@
   rotationSensitivityEl.addEventListener('input', function () {
     rotationSensitivity = parseFloat(rotationSensitivityEl.value) || 1;
   });
+  canvas.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var step = e.deltaY > 0 ? -0.12 : 0.12;
+    targetZoom = Math.max(0.3, Math.min(2.5, targetZoom + step));
+  }, { passive: false });
 
   function spawnExplosion() {
     var p;
     for (p = 0; p < 45; p += 1) {
       var a = Math.random() * Math.PI * 2;
-      var speed = 10 + Math.random() * 45; // m/s
-      particles.push({
-        x: rocket.x,
-        y: rocket.y,
-        vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed,
-        life: 0.6 + Math.random() * 0.8,
-        size: 2 + Math.random() * 3.5,
-        c: Math.random() > 0.45 ? '#f97316' : '#ef4444'
-      });
+      var speed = 10 + Math.random() * 45;
+      particles.push({ x: rocket.x, y: rocket.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 0.6 + Math.random() * 0.8, size: 2 + Math.random() * 3.5, c: Math.random() > 0.45 ? '#f97316' : '#ef4444' });
     }
   }
 
-  function updateParticles(deltaTime) {
+  function updateParticles(dt) {
     var p;
     for (p = particles.length - 1; p >= 0; p -= 1) {
-      particles[p].life -= deltaTime;
-      particles[p].x += particles[p].vx * deltaTime;
-      particles[p].y += particles[p].vy * deltaTime;
-      particles[p].vy += gravity * 0.45 * deltaTime;
+      particles[p].life -= dt;
+      particles[p].x += particles[p].vx * dt;
+      particles[p].y += particles[p].vy * dt;
+      particles[p].vy += gravity * 0.45 * dt;
       if (particles[p].life <= 0) {
         particles.splice(p, 1);
       }
     }
   }
 
-  function update(deltaTime) {
-    updateParticles(deltaTime);
-
+  function update(dt) {
+    updateParticles(dt);
     if (state === 'CRASHED') {
       return;
     }
 
-    // --- Rotation dynamics (rad/s, rad/s^2) ---
     var rotationAccel = baseRotationAcceleration * rotationSensitivity;
     if (rocket.rotateLeft) {
-      rocket.angularVelocity -= rotationAccel * deltaTime;
+      rocket.angularVelocity -= rotationAccel * dt;
     }
     if (rocket.rotateRight) {
-      rocket.angularVelocity += rotationAccel * deltaTime;
+      rocket.angularVelocity += rotationAccel * dt;
     }
+    rocket.angularVelocity += -rocket.angularVelocity * angularDragCoeff * dt;
+    rocket.angle += rocket.angularVelocity * dt;
 
-    // intentional small damping only
-    rocket.angularVelocity += -rocket.angularVelocity * angularDragCoeff * deltaTime;
-    rocket.angle += rocket.angularVelocity * deltaTime;
-
-    // Manual throttle control (0..1), adjusted gradually by keys.
     if (rocket.throttleUp && rocket.fuel > 0) {
-      rocket.throttle = Math.min(1, rocket.throttle + 0.55 * deltaTime);
+      rocket.throttle = Math.min(1, rocket.throttle + 0.55 * dt);
     }
     if (rocket.throttleDown) {
-      rocket.throttle = Math.max(0, rocket.throttle - 0.65 * deltaTime);
+      rocket.throttle = Math.max(0, rocket.throttle - 0.65 * dt);
     }
 
-    // --- Forces (Newtons) ---
-    var forceX = 0;
-    var forceY = rocketMass * gravity;
-
+    var fx = 0;
+    var fy = rocketMass * gravity;
     if (rocket.throttle > 0 && rocket.fuel > 0) {
       var currentThrust = thrustForce * rocket.throttle;
-      forceX += Math.sin(rocket.angle) * currentThrust;
-      forceY += -Math.cos(rocket.angle) * currentThrust;
-      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * rocket.throttle * deltaTime);
+      fx += Math.sin(rocket.angle) * currentThrust;
+      fy += -Math.cos(rocket.angle) * currentThrust;
+      rocket.fuel = Math.max(0, rocket.fuel - fuelBurnRate * rocket.throttle * dt);
     }
 
-    // Very small drag force opposite velocity
-    forceX += -linearDragCoeff * rocket.vx;
-    forceY += -linearDragCoeff * rocket.vy;
+    fx += -linearDragCoeff * rocket.vx;
+    fy += -linearDragCoeff * rocket.vy;
 
-    // acceleration = force / mass
-    var ax = forceX / rocketMass;
-    var ay = forceY / rocketMass;
+    rocket.vx += (fx / rocketMass) * dt;
+    rocket.vy += (fy / rocketMass) * dt;
+    rocket.x += rocket.vx * dt;
+    rocket.y += rocket.vy * dt;
 
-    // velocity += acceleration * dt
-    rocket.vx += ax * deltaTime;
-    rocket.vy += ay * deltaTime;
-
-    // position += velocity * dt
-    rocket.x += rocket.vx * deltaTime;
-    rocket.y += rocket.vy * deltaTime;
-
+    var terrainY = getGroundY(rocket.x);
     var bottom = rocket.y + rocket.heightM * 0.5;
-    var touchingGround = bottom >= pad.y;
+    var touchingGround = bottom >= terrainY;
 
     if (state === 'READY') {
       if (touchingGround) {
-        rocket.y = pad.y - rocket.heightM * 0.5;
+        rocket.y = terrainY - rocket.heightM * 0.5;
         if (rocket.vy > 0) {
           rocket.vy = 0;
         }
@@ -233,29 +219,21 @@
       if (rocket.throttle > 0 && !touchingGround) {
         state = 'FLYING';
         readyStatus = 'Ready';
-        statusEl.textContent = 'Flying';
       }
     } else if (state === 'FLYING') {
-      // Landing / crash checks only while flying and descending.
       if (touchingGround && rocket.vy > 0) {
-        rocket.y = pad.y - rocket.heightM * 0.5;
+        rocket.y = terrainY - rocket.heightM * 0.5;
 
         var verticalSpeed = Math.abs(rocket.vy);
-        var horizontalSpeed = Math.abs(rocket.vx);
-        var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
-        var angleAbs = Math.abs(normAngleDeg(rocket.angle));
-
-        var safeLanding = onPad && verticalSpeed <= 5 && horizontalSpeed <= 4 && angleAbs <= 20;
-        var hardLanding = onPad && verticalSpeed > 5 && verticalSpeed <= 13 && horizontalSpeed <= 7 && angleAbs <= 20;
+        var safeLanding = verticalSpeed <= 7;
+        var hardLanding = verticalSpeed >= 13 && verticalSpeed <= 17;
 
         if (safeLanding) {
           state = 'READY';
           readyStatus = 'Successful Landing';
-          statusEl.textContent = readyStatus;
         } else if (hardLanding) {
           state = 'READY';
           readyStatus = 'Hard Landing';
-          statusEl.textContent = readyStatus;
         } else {
           state = 'CRASHED';
           statusEl.textContent = 'Crashed';
@@ -287,29 +265,31 @@
   function drawStars() {
     var s;
     for (s = 0; s < stars.length; s += 1) {
-      var sx = stars[s].x * PIXELS_PER_METER;
-      var sy = stars[s].y * PIXELS_PER_METER;
-      if (sx < camera.x * PIXELS_PER_METER - canvas.width || sx > camera.x * PIXELS_PER_METER + canvas.width * 2 ||
-          sy < camera.y * PIXELS_PER_METER - canvas.height || sy > camera.y * PIXELS_PER_METER + canvas.height * 2) {
-        continue;
-      }
       ctx.fillStyle = 'rgba(255,255,255,' + stars[s].a + ')';
       ctx.beginPath();
-      ctx.arc(sx, sy, stars[s].r / zoom, 0, Math.PI * 2);
+      ctx.arc(stars[s].x * PIXELS_PER_METER, stars[s].y * PIXELS_PER_METER, stars[s].r / zoom, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
   function drawWorld() {
-    var gy = GROUND_Y_M * PIXELS_PER_METER;
-    var py = pad.y * PIXELS_PER_METER;
+    var startX = camera.x - canvas.width / PIXELS_PER_METER;
+    var endX = camera.x + canvas.width / PIXELS_PER_METER;
+    var step = 1.2;
+    var x;
 
     ctx.fillStyle = '#2b4d2a';
-    ctx.fillRect(-100000, gy, 200000, 100000);
+    ctx.beginPath();
+    ctx.moveTo(startX * PIXELS_PER_METER, canvas.height * 4);
+    for (x = startX; x <= endX; x += step) {
+      ctx.lineTo(x * PIXELS_PER_METER, getGroundY(x) * PIXELS_PER_METER);
+    }
+    ctx.lineTo(endX * PIXELS_PER_METER, canvas.height * 4);
+    ctx.closePath();
+    ctx.fill();
 
-    var px = pad.x * PIXELS_PER_METER;
     ctx.fillStyle = '#7dd3fc';
-    ctx.fillRect(px, py, pad.w * PIXELS_PER_METER, pad.h * PIXELS_PER_METER);
+    ctx.fillRect(pad.x * PIXELS_PER_METER, pad.y * PIXELS_PER_METER, pad.w * PIXELS_PER_METER, pad.h * PIXELS_PER_METER);
   }
 
   function drawRocket() {
@@ -323,13 +303,10 @@
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rocket.angle);
-
-    var scale = 1.25;
-    ctx.scale(scale, scale);
+    ctx.scale(1.25, 1.25);
 
     ctx.fillStyle = '#e2e8f0';
     ctx.fillRect(-8, -20, 16, 40);
-
     ctx.beginPath();
     ctx.moveTo(-8, -20);
     ctx.lineTo(0, -34);
@@ -337,14 +314,11 @@
     ctx.closePath();
     ctx.fillStyle = '#cbd5e1';
     ctx.fill();
-
     ctx.fillStyle = '#64748b';
     ctx.fillRect(-13, 8, 5, 14);
     ctx.fillRect(8, 8, 5, 14);
-
     ctx.fillStyle = '#334155';
     ctx.fillRect(-6, 20, 12, 6);
-
     ctx.fillStyle = '#38bdf8';
     ctx.beginPath();
     ctx.arc(0, -4, 4.5, 0, Math.PI * 2);
@@ -359,7 +333,6 @@
       ctx.closePath();
       ctx.fillStyle = '#fb923c';
       ctx.fill();
-
       ctx.beginPath();
       ctx.moveTo(-2.3, 26);
       ctx.lineTo(0, 24 + flame * 0.6);
@@ -375,19 +348,17 @@
   function drawParticles() {
     var p;
     for (p = 0; p < particles.length; p += 1) {
-      var px = particles[p].x * PIXELS_PER_METER;
-      var py = particles[p].y * PIXELS_PER_METER;
       ctx.globalAlpha = Math.max(0, particles[p].life);
       ctx.fillStyle = particles[p].c;
       ctx.beginPath();
-      ctx.arc(px, py, particles[p].size, 0, Math.PI * 2);
+      ctx.arc(particles[p].x * PIXELS_PER_METER, particles[p].y * PIXELS_PER_METER, particles[p].size, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
 
   function updateHud() {
-    var altitude = Math.max(0, GROUND_Y_M - (rocket.y + rocket.heightM * 0.5));
+    var altitude = Math.max(0, getGroundY(rocket.x) - (rocket.y + rocket.heightM * 0.5));
     var totalVelocity = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
 
     altitudeEl.textContent = altitude.toFixed(1) + ' m';
@@ -405,12 +376,12 @@
   }
 
   function render() {
-    var altitude = Math.max(0, GROUND_Y_M - (rocket.y + rocket.heightM * 0.5));
-    zoom = Math.max(0.5, Math.min(1.5, 1.45 - altitude / 180));
+    zoom += (targetZoom - zoom) * 0.12;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackground();
+
     ctx.setTransform(
       zoom,
       0,
@@ -419,10 +390,12 @@
       canvas.width / 2 - camera.x * PIXELS_PER_METER * zoom,
       canvas.height / 2 - camera.y * PIXELS_PER_METER * zoom
     );
+
     drawStars();
     drawWorld();
     drawRocket();
     drawParticles();
+
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     updateHud();
   }
