@@ -236,7 +236,7 @@
       var angleAbs = Math.abs(normAngleDeg(rocket.angle));
 
       var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 10;
-      var hardLanding = onPad && verticalSpeed < 9 && horizontalSpeed < 6 && angleAbs < 15;
+      var hardLanding = verticalSpeed < 10 && horizontalSpeed < 7 && angleAbs < 20;
 
       if (safeLanding) {
         rocket.landed = true;
