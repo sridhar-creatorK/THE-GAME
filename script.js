@@ -26,6 +26,7 @@
   var angularDragCoeff = 0.4; // rad/s damping
 
   var baseRotationAcceleration = 0.9; // rad/s^2
+  var state = 'READY'; // READY | FLYING | LANDED | CRASHED
 
   var rocket = {
     x: WORLD_W_M * 0.5,
@@ -42,9 +43,7 @@
     throttleDown: false,
     rotateLeft: false,
     rotateRight: false,
-    onGround: true,
-    landed: false,
-    crashed: false
+    onGround: true
   };
 
   var pad = { x: WORLD_W_M * 0.5 - 12, y: GROUND_Y_M - 1.2, w: 24, h: 1.2 };
@@ -78,10 +77,9 @@
     rocket.rotateLeft = false;
     rocket.rotateRight = false;
     rocket.onGround = true;
-    rocket.landed = false;
-    rocket.crashed = false;
+    state = 'READY';
     particles = [];
-    statusEl.textContent = 'Flying';
+    statusEl.textContent = 'Ready';
   }
 
   function normAngleDeg(rad) {
@@ -166,7 +164,7 @@
   function update(deltaTime) {
     updateParticles(deltaTime);
 
-    if (rocket.landed || rocket.crashed) {
+    if (state === 'LANDED' || state === 'CRASHED') {
       return;
     }
 
@@ -190,18 +188,6 @@
     if (rocket.throttleDown) {
       rocket.throttle = Math.max(0, rocket.throttle - 0.65 * deltaTime);
     }
-
-    // If on ground and no real launch throttle, keep stable on pad.
-    if (rocket.onGround && rocket.throttle < 0.12) {
-      rocket.vx = 0;
-      rocket.vy = 0;
-      rocket.angularVelocity *= 0.85;
-      rocket.y = pad.y - rocket.heightM * 0.5;
-      camera.x += (rocket.x - camera.x) * Math.min(1, deltaTime * 4.8);
-      camera.y += (rocket.y - camera.y) * Math.min(1, deltaTime * 4.8);
-      return;
-    }
-    rocket.onGround = false;
 
     // --- Forces (Newtons) ---
     var forceX = 0;
@@ -230,54 +216,56 @@
     rocket.x += rocket.vx * deltaTime;
     rocket.y += rocket.vy * deltaTime;
 
-    // Side boundaries: constrain position only (no velocity cap)
-    var halfW = rocket.widthM * 0.5;
-    if (rocket.x < halfW) {
-      rocket.x = halfW;
-      rocket.vx = Math.abs(rocket.vx) * 0.2;
-    } else if (rocket.x > WORLD_W_M - halfW) {
-      rocket.x = WORLD_W_M - halfW;
-      rocket.vx = -Math.abs(rocket.vx) * 0.2;
-    }
-
-    // Landing / crash logic based on real velocities
     var bottom = rocket.y + rocket.heightM * 0.5;
-    if (bottom >= pad.y) {
-      rocket.y = pad.y - rocket.heightM * 0.5;
+    var touchingGround = bottom >= pad.y;
 
-      var verticalSpeed = Math.abs(rocket.vy);
-      var horizontalSpeed = Math.abs(rocket.vx);
-      var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
-      var angleAbs = Math.abs(normAngleDeg(rocket.angle));
-
-      var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 15;
-      var hardLanding = verticalSpeed < 10 && horizontalSpeed < 7 && angleAbs < 35;
-
-      if (safeLanding) {
-        rocket.onGround = true;
-        rocket.landed = true;
-        statusEl.textContent = 'Successful Landing';
-      } else if (hardLanding) {
-        rocket.onGround = true;
-        rocket.landed = true;
-        statusEl.textContent = 'Hard Landing';
-      } else {
-        rocket.onGround = false;
-        rocket.crashed = true;
-        statusEl.textContent = 'Crashed';
-        spawnExplosion();
+    if (state === 'READY') {
+      if (touchingGround) {
+        rocket.y = pad.y - rocket.heightM * 0.5;
+        if (rocket.vy > 0) {
+          rocket.vy = 0;
+        }
       }
+      if (rocket.throttle > 0 && !touchingGround) {
+        state = 'FLYING';
+        statusEl.textContent = 'Flying';
+      }
+    } else if (state === 'FLYING') {
+      // Landing / crash checks only while flying and descending.
+      if (touchingGround && rocket.vy > 0) {
+        rocket.y = pad.y - rocket.heightM * 0.5;
 
-      rocket.vx = 0;
-      rocket.vy = 0;
-      rocket.angularVelocity = 0;
-      rocket.throttle = 0;
-      rocket.throttleUp = false;
-      rocket.throttleDown = false;
+        var verticalSpeed = Math.abs(rocket.vy);
+        var horizontalSpeed = Math.abs(rocket.vx);
+        var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
+        var angleAbs = Math.abs(normAngleDeg(rocket.angle));
+
+        var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 15;
+        var hardLanding = verticalSpeed < 10 && horizontalSpeed < 7 && angleAbs < 35;
+
+        if (safeLanding) {
+          state = 'LANDED';
+          statusEl.textContent = 'Successful Landing';
+        } else if (hardLanding) {
+          state = 'LANDED';
+          statusEl.textContent = 'Hard Landing';
+        } else {
+          state = 'CRASHED';
+          statusEl.textContent = 'Crashed';
+          spawnExplosion();
+        }
+
+        rocket.vx = 0;
+        rocket.vy = 0;
+        rocket.angularVelocity = 0;
+        rocket.throttle = 0;
+        rocket.throttleUp = false;
+        rocket.throttleDown = false;
+      }
     }
 
-    camera.x += (rocket.x - camera.x) * Math.min(1, deltaTime * 4.8);
-    camera.y += (rocket.y - camera.y) * Math.min(1, deltaTime * 4.8);
+    camera.x += (rocket.x - camera.x) * 0.1;
+    camera.y += (rocket.y - camera.y) * 0.1;
   }
 
   function worldToScreenX(xMeters) {
@@ -323,7 +311,7 @@
   }
 
   function drawRocket() {
-    if (rocket.crashed) {
+    if (state === 'CRASHED') {
       return;
     }
 
@@ -360,7 +348,7 @@
     ctx.arc(0, -4, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    if (rocket.throttle > 0.05 && rocket.fuel > 0 && !rocket.landed) {
+    if (rocket.throttle > 0.05 && rocket.fuel > 0 && state !== 'LANDED') {
       var flame = 8 + Math.random() * 10 * rocket.throttle;
       ctx.beginPath();
       ctx.moveTo(-4.5, 26);
@@ -407,7 +395,9 @@
     fuelEl.textContent = rocket.fuel.toFixed(0) + '%';
     fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
 
-    if (!rocket.landed && !rocket.crashed) {
+    if (state === 'READY') {
+      statusEl.textContent = 'Ready';
+    } else if (state === 'FLYING') {
       statusEl.textContent = 'Flying';
     }
   }
