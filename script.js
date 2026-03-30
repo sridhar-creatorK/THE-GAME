@@ -3,66 +3,63 @@
   var ctx = canvas.getContext('2d');
 
   var altitudeEl = document.getElementById('altitude');
-  var fuelEl = document.getElementById('fuel');
-  var vSpeedEl = document.getElementById('vSpeed');
-  var hSpeedEl = document.getElementById('hSpeed');
+  var velocityEl = document.getElementById('velocity');
   var angleEl = document.getElementById('angle');
   var statusEl = document.getElementById('status');
+  var fuelEl = document.getElementById('fuel');
   var fuelBarEl = document.getElementById('fuelBar');
 
-  var gravity = 78;
-  var thrustPower = 196;
-  var rotationSpeed = 125;
-  var fuelBurn = 15;
-  var drag = 0.012;
-
-  var groundY = canvas.height * 0.78;
-  var landingPad = {
-    x: canvas.width / 2 - 48,
-    y: groundY - 8,
-    w: 96,
-    h: 8
-  };
+  var WORLD_W = 900;
+  var GROUND_Y = 1200;
+  var gravity = 84;
+  var thrustPower = 205;
+  var fuelBurn = 16;
+  var linearDamping = 0.992;
+  var angularDamping = 0.93;
 
   var rocket = {
-    x: canvas.width / 2,
-    y: 120,
+    x: WORLD_W * 0.5,
+    y: 220,
     vx: 0,
     vy: 0,
     angle: 0,
+    angularVelocity: 0,
+    width: 24,
+    height: 74,
     fuel: 100,
-    width: 18,
-    height: 52,
     thrusting: false,
-    left: false,
-    right: false,
+    rotateLeft: false,
+    rotateRight: false,
     landed: false,
     crashed: false
   };
 
+  var pad = { x: WORLD_W * 0.5 - 70, y: GROUND_Y - 8, w: 140, h: 8 };
+  var camera = { x: rocket.x, y: rocket.y };
   var stars = [];
   var particles = [];
   var i;
 
-  for (i = 0; i < 75; i += 1) {
+  for (i = 0; i < 150; i += 1) {
     stars.push({
-      x: Math.random() * canvas.width,
-      y: Math.random() * (groundY - 35),
-      r: 0.4 + Math.random() * 1.3,
-      a: 0.35 + Math.random() * 0.65
+      x: Math.random() * WORLD_W,
+      y: Math.random() * (GROUND_Y - 120),
+      r: 0.5 + Math.random() * 1.3,
+      a: 0.25 + Math.random() * 0.6
     });
   }
 
   function resetGame() {
-    rocket.x = canvas.width / 2;
-    rocket.y = 120;
+    rocket.x = WORLD_W * 0.5;
+    rocket.y = 220;
     rocket.vx = 0;
     rocket.vy = 0;
     rocket.angle = 0;
+    rocket.angularVelocity = 0;
     rocket.fuel = 100;
     rocket.thrusting = false;
-    rocket.left = false;
-    rocket.right = false;
+    rocket.rotateLeft = false;
+    rocket.rotateRight = false;
     rocket.landed = false;
     rocket.crashed = false;
     particles = [];
@@ -77,50 +74,50 @@
     return n;
   }
 
-  function handleKeyDown(e) {
+  function keyDown(e) {
     if (e.code === 'ArrowUp' || e.code === 'Space') {
       e.preventDefault();
       rocket.thrusting = true;
     } else if (e.code === 'ArrowLeft') {
       e.preventDefault();
-      rocket.left = true;
+      rocket.rotateLeft = true;
     } else if (e.code === 'ArrowRight') {
       e.preventDefault();
-      rocket.right = true;
+      rocket.rotateRight = true;
     } else if (e.code === 'KeyR') {
       resetGame();
     }
   }
 
-  function handleKeyUp(e) {
+  function keyUp(e) {
     if (e.code === 'ArrowUp' || e.code === 'Space') {
       e.preventDefault();
       rocket.thrusting = false;
     } else if (e.code === 'ArrowLeft') {
       e.preventDefault();
-      rocket.left = false;
+      rocket.rotateLeft = false;
     } else if (e.code === 'ArrowRight') {
       e.preventDefault();
-      rocket.right = false;
+      rocket.rotateRight = false;
     }
   }
 
-  document.addEventListener('keydown', handleKeyDown);
-  document.addEventListener('keyup', handleKeyUp);
+  document.addEventListener('keydown', keyDown);
+  document.addEventListener('keyup', keyUp);
 
-  function makeExplosion() {
-    var count;
-    for (count = 0; count < 36; count += 1) {
-      var speed = 50 + Math.random() * 180;
-      var angle = Math.random() * Math.PI * 2;
+  function spawnExplosion() {
+    var p;
+    for (p = 0; p < 45; p += 1) {
+      var a = Math.random() * Math.PI * 2;
+      var speed = 35 + Math.random() * 220;
       particles.push({
         x: rocket.x,
         y: rocket.y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.8 + Math.random() * 0.6,
-        size: 2 + Math.random() * 4,
-        color: Math.random() > 0.5 ? '#fb923c' : '#ef4444'
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        life: 0.6 + Math.random() * 0.8,
+        size: 2 + Math.random() * 3.5,
+        c: Math.random() > 0.45 ? '#f97316' : '#ef4444'
       });
     }
   }
@@ -131,8 +128,8 @@
       particles[p].life -= dt;
       particles[p].x += particles[p].vx * dt;
       particles[p].y += particles[p].vy * dt;
-      particles[p].vy += gravity * 0.35 * dt;
-      particles[p].vx *= 0.99;
+      particles[p].vy += gravity * 0.25 * dt;
+      particles[p].vx *= 0.988;
       if (particles[p].life <= 0) {
         particles.splice(p, 1);
       }
@@ -146,12 +143,15 @@
       return;
     }
 
-    if (rocket.left) {
-      rocket.angle -= rotationSpeed * dt;
+    if (rocket.rotateLeft) {
+      rocket.angularVelocity -= 155 * dt;
     }
-    if (rocket.right) {
-      rocket.angle += rotationSpeed * dt;
+    if (rocket.rotateRight) {
+      rocket.angularVelocity += 155 * dt;
     }
+
+    rocket.angularVelocity *= angularDamping;
+    rocket.angle += rocket.angularVelocity;
 
     var ax = 0;
     var ay = gravity;
@@ -166,66 +166,87 @@
     rocket.vx += ax * dt;
     rocket.vy += ay * dt;
 
-    rocket.vx *= 1 - drag;
-    rocket.vy *= 1 - drag * 0.35;
+    rocket.vx *= linearDamping;
+    rocket.vy *= linearDamping;
 
     rocket.x += rocket.vx * dt;
     rocket.y += rocket.vy * dt;
 
-    var halfW = rocket.width / 2;
-    if (rocket.x < halfW) {
-      rocket.x = halfW;
+    if (rocket.x < rocket.width * 0.5) {
+      rocket.x = rocket.width * 0.5;
       rocket.vx = 0;
-    } else if (rocket.x > canvas.width - halfW) {
-      rocket.x = canvas.width - halfW;
+    } else if (rocket.x > WORLD_W - rocket.width * 0.5) {
+      rocket.x = WORLD_W - rocket.width * 0.5;
       rocket.vx = 0;
     }
 
-    var bottom = rocket.y + rocket.height / 2;
-    if (bottom >= landingPad.y) {
-      rocket.y = landingPad.y - rocket.height / 2;
-      var safeVertical = Math.abs(rocket.vy) < 28;
-      var safeHorizontal = Math.abs(rocket.vx) < 16;
-      var safeAngle = Math.abs(normAngle(rocket.angle)) < 9;
-      var onPad = rocket.x > landingPad.x && rocket.x < landingPad.x + landingPad.w;
+    var bottom = rocket.y + rocket.height * 0.5;
+    if (bottom >= pad.y) {
+      rocket.y = pad.y - rocket.height * 0.5;
+      var speed = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
+      var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
+      var upright = Math.abs(normAngle(rocket.angle)) < 8;
 
-      if (onPad && safeVertical && safeHorizontal && safeAngle) {
+      if (onPad && speed < 26 && upright) {
         rocket.landed = true;
-        statusEl.textContent = 'Landed';
+        statusEl.textContent = 'Successful Landing';
       } else {
         rocket.crashed = true;
         statusEl.textContent = 'Crashed';
-        makeExplosion();
+        spawnExplosion();
       }
 
       rocket.vx = 0;
       rocket.vy = 0;
+      rocket.angularVelocity = 0;
       rocket.thrusting = false;
     }
+
+    // smooth camera follow (keep rocket near center)
+    camera.x += (rocket.x - camera.x) * 0.08;
+    camera.y += (rocket.y - camera.y) * 0.08;
+  }
+
+  function worldToScreenX(x) {
+    return x - camera.x + canvas.width / 2;
+  }
+
+  function worldToScreenY(y) {
+    return y - camera.y + canvas.height / 2;
   }
 
   function drawBackground() {
-    var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#020617');
-    gradient.addColorStop(0.55, '#0a1d46');
-    gradient.addColorStop(1, '#365a2d');
-
-    ctx.fillStyle = gradient;
+    var g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#020617');
+    g.addColorStop(0.55, '#0a1d46');
+    g.addColorStop(1, '#2f5532');
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     var s;
     for (s = 0; s < stars.length; s += 1) {
+      var sx = worldToScreenX(stars[s].x);
+      var sy = worldToScreenY(stars[s].y);
+      if (sx < -3 || sx > canvas.width + 3 || sy < -3 || sy > canvas.height + 3) {
+        continue;
+      }
       ctx.fillStyle = 'rgba(255,255,255,' + stars[s].a + ')';
       ctx.beginPath();
-      ctx.arc(stars[s].x, stars[s].y, stars[s].r, 0, Math.PI * 2);
+      ctx.arc(sx, sy, stars[s].r, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
 
-    ctx.fillStyle = '#2f4b28';
-    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+  function drawWorld() {
+    var gy = worldToScreenY(GROUND_Y);
+    var py = worldToScreenY(pad.y);
 
+    ctx.fillStyle = '#2b4d2a';
+    ctx.fillRect(0, gy, canvas.width, canvas.height - gy);
+
+    var px = worldToScreenX(pad.x);
     ctx.fillStyle = '#7dd3fc';
-    ctx.fillRect(landingPad.x, landingPad.y, landingPad.w, landingPad.h);
+    ctx.fillRect(px, py, pad.w, pad.h);
   }
 
   function drawRocket() {
@@ -233,53 +254,53 @@
       return;
     }
 
+    var x = worldToScreenX(rocket.x);
+    var y = worldToScreenY(rocket.y);
+
     ctx.save();
-    ctx.translate(rocket.x, rocket.y);
+    ctx.translate(x, y);
     ctx.rotate((rocket.angle * Math.PI) / 180);
 
-    // Body
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillRect(-7, -18, 14, 32);
+    var scale = 1.25;
+    ctx.scale(scale, scale);
 
-    // Nose cone
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(-8, -20, 16, 40);
+
     ctx.beginPath();
-    ctx.moveTo(-7, -18);
-    ctx.lineTo(0, -30);
-    ctx.lineTo(7, -18);
+    ctx.moveTo(-8, -20);
+    ctx.lineTo(0, -34);
+    ctx.lineTo(8, -20);
     ctx.closePath();
     ctx.fillStyle = '#cbd5e1';
     ctx.fill();
 
-    // Fins
     ctx.fillStyle = '#64748b';
-    ctx.fillRect(-11, 8, 4, 12);
-    ctx.fillRect(7, 8, 4, 12);
+    ctx.fillRect(-13, 8, 5, 14);
+    ctx.fillRect(8, 8, 5, 14);
 
-    // Engine bell
     ctx.fillStyle = '#334155';
-    ctx.fillRect(-5, 14, 10, 6);
+    ctx.fillRect(-6, 20, 12, 6);
 
-    // Window
     ctx.fillStyle = '#38bdf8';
     ctx.beginPath();
-    ctx.arc(0, -4, 4, 0, Math.PI * 2);
+    ctx.arc(0, -4, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Flame (animated only while thrusting)
     if (rocket.thrusting && rocket.fuel > 0 && !rocket.landed) {
-      var jitter = Math.random() * 10;
+      var flame = 9 + Math.random() * 12;
       ctx.beginPath();
-      ctx.moveTo(-4, 20);
-      ctx.lineTo(0, 28 + jitter);
-      ctx.lineTo(4, 20);
+      ctx.moveTo(-4.5, 26);
+      ctx.lineTo(0, 26 + flame);
+      ctx.lineTo(4.5, 26);
       ctx.closePath();
       ctx.fillStyle = '#fb923c';
       ctx.fill();
 
       ctx.beginPath();
-      ctx.moveTo(-2, 20);
-      ctx.lineTo(0, 24 + jitter * 0.6);
-      ctx.lineTo(2, 20);
+      ctx.moveTo(-2.3, 26);
+      ctx.lineTo(0, 24 + flame * 0.65);
+      ctx.lineTo(2.3, 26);
       ctx.closePath();
       ctx.fillStyle = '#fde68a';
       ctx.fill();
@@ -288,37 +309,40 @@
     ctx.restore();
   }
 
-  function drawExplosion() {
+  function drawParticles() {
     var p;
     for (p = 0; p < particles.length; p += 1) {
+      var px = worldToScreenX(particles[p].x);
+      var py = worldToScreenY(particles[p].y);
       ctx.globalAlpha = Math.max(0, particles[p].life);
-      ctx.fillStyle = particles[p].color;
+      ctx.fillStyle = particles[p].c;
       ctx.beginPath();
-      ctx.arc(particles[p].x, particles[p].y, particles[p].size, 0, Math.PI * 2);
+      ctx.arc(px, py, particles[p].size, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
 
   function updateHud() {
-    var altitude = Math.max(0, landingPad.y - (rocket.y + rocket.height / 2));
+    var altitude = Math.max(0, GROUND_Y - (rocket.y + rocket.height * 0.5));
+    var velocity = Math.sqrt(rocket.vx * rocket.vx + rocket.vy * rocket.vy);
+
     altitudeEl.textContent = altitude.toFixed(0) + ' m';
-    fuelEl.textContent = rocket.fuel.toFixed(0) + '%';
-    vSpeedEl.textContent = rocket.vy.toFixed(1) + ' m/s';
-    hSpeedEl.textContent = rocket.vx.toFixed(1) + ' m/s';
+    velocityEl.textContent = velocity.toFixed(1) + ' m/s';
     angleEl.textContent = normAngle(rocket.angle).toFixed(1) + '°';
+    fuelEl.textContent = rocket.fuel.toFixed(0) + '%';
+    fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
 
     if (!rocket.landed && !rocket.crashed) {
       statusEl.textContent = 'Flying';
     }
-
-    fuelBarEl.style.width = rocket.fuel.toFixed(2) + '%';
   }
 
   function render() {
     drawBackground();
+    drawWorld();
     drawRocket();
-    drawExplosion();
+    drawParticles();
     updateHud();
   }
 

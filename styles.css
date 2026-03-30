@@ -3,9 +3,7 @@
   font-family: "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -17,72 +15,25 @@ body {
 }
 
 .app {
-  width: min(94vw, 520px);
+  width: min(96vw, 560px);
   text-align: center;
 }
 
-h1 {
-  margin: 0 0 0.4rem;
-  font-size: 1.45rem;
-}
-
-.help {
-  margin: 0 0 0.75rem;
-  color: #cbd5e1;
-}
+h1 { margin: 0 0 0.4rem; font-size: 1.35rem; }
+.help { margin: 0 0 0.7rem; color: #cbd5e1; }
 
 kbd {
   border: 1px solid #64748b;
   border-radius: 4px;
-  padding: 0.1rem 0.28rem;
+  padding: 0.08rem 0.28rem;
   background: #1f2937;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
 }
 
-.hud {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.48rem;
-  text-align: left;
-  padding: 0.75rem;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(4px);
-  margin-bottom: 0.8rem;
-}
-
-.hud div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.hud strong {
-  font-size: 0.74rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.hud span {
-  font-size: 0.96rem;
-}
-
-.fuel-wrap {
-  grid-column: 1 / span 3;
-  height: 12px;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid rgba(100, 116, 139, 0.8);
-  background: #111827;
-}
-
-#fuelBar {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, #ef4444, #f59e0b 35%, #22c55e 100%);
-  transition: width 80ms linear;
+.game-wrap {
+  position: relative;
+  width: min(92vw, 420px);
+  margin: 0 auto;
 }
 
 #gameCanvas {
@@ -90,5 +41,43 @@ kbd {
   max-width: 420px;
   border-radius: 12px;
   border: 2px solid #334155;
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.45);
+}
+
+.hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  width: 190px;
+  padding: 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(10, 16, 31, 0.72);
+  backdrop-filter: blur(5px);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+.hud div { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.hud span { color: #94a3b8; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.hud strong { font-size: 0.92rem; }
+
+.fuel-row { margin-top: 0.2rem; }
+.fuel-wrap {
+  width: 100%;
+  height: 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(100, 116, 139, 0.8);
+  overflow: hidden;
+  background: #111827;
+}
+
+#fuelBar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444, #f59e0b 45%, #22c55e 100%);
+  transition: width 80ms linear;
 }
