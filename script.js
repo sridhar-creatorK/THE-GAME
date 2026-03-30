@@ -18,18 +18,18 @@
   var GROUND_Y_M = 240;
 
   var gravity = 9.81; // m/s^2
-  var rocketMass = 1200; // kg
-  var thrustForce = 16500; // N
+  var rocketMass = 1800; // kg
+  var thrustForce = 22000; // N
   var fuelBurnRate = 0.55; // % per second at full throttle
 
-  var linearDragCoeff = 0.018; // small, intentional damping
-  var angularDragCoeff = 1.2; // rad/s damping
+  var linearDragCoeff = 0.01; // very small, intentional damping
+  var angularDragCoeff = 0.4; // rad/s damping
 
   var baseRotationAcceleration = 0.9; // rad/s^2
 
   var rocket = {
     x: WORLD_W_M * 0.5,
-    y: 45,
+    y: 0,
     vx: 0,
     vy: 0,
     angle: 0,
@@ -42,6 +42,7 @@
     throttleDown: false,
     rotateLeft: false,
     rotateRight: false,
+    onGround: true,
     landed: false,
     crashed: false
   };
@@ -63,8 +64,9 @@
   }
 
   function resetGame() {
+    var groundY = pad.y - rocket.heightM * 0.5;
     rocket.x = WORLD_W_M * 0.5;
-    rocket.y = 45;
+    rocket.y = groundY;
     rocket.vx = 0;
     rocket.vy = 0;
     rocket.angle = 0;
@@ -75,6 +77,7 @@
     rocket.throttleDown = false;
     rocket.rotateLeft = false;
     rocket.rotateRight = false;
+    rocket.onGround = true;
     rocket.landed = false;
     rocket.crashed = false;
     particles = [];
@@ -188,6 +191,18 @@
       rocket.throttle = Math.max(0, rocket.throttle - 0.65 * deltaTime);
     }
 
+    // If on ground and no real launch throttle, keep stable on pad.
+    if (rocket.onGround && rocket.throttle < 0.12) {
+      rocket.vx = 0;
+      rocket.vy = 0;
+      rocket.angularVelocity *= 0.85;
+      rocket.y = pad.y - rocket.heightM * 0.5;
+      camera.x += (rocket.x - camera.x) * Math.min(1, deltaTime * 4.8);
+      camera.y += (rocket.y - camera.y) * Math.min(1, deltaTime * 4.8);
+      return;
+    }
+    rocket.onGround = false;
+
     // --- Forces (Newtons) ---
     var forceX = 0;
     var forceY = rocketMass * gravity;
@@ -219,10 +234,10 @@
     var halfW = rocket.widthM * 0.5;
     if (rocket.x < halfW) {
       rocket.x = halfW;
-      rocket.vx = 0;
+      rocket.vx = Math.abs(rocket.vx) * 0.2;
     } else if (rocket.x > WORLD_W_M - halfW) {
       rocket.x = WORLD_W_M - halfW;
-      rocket.vx = 0;
+      rocket.vx = -Math.abs(rocket.vx) * 0.2;
     }
 
     // Landing / crash logic based on real velocities
@@ -235,16 +250,19 @@
       var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
       var angleAbs = Math.abs(normAngleDeg(rocket.angle));
 
-      var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 10;
-      var hardLanding = verticalSpeed < 10 && horizontalSpeed < 7 && angleAbs < 20;
+      var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 15;
+      var hardLanding = verticalSpeed < 10 && horizontalSpeed < 7 && angleAbs < 35;
 
       if (safeLanding) {
+        rocket.onGround = true;
         rocket.landed = true;
         statusEl.textContent = 'Successful Landing';
       } else if (hardLanding) {
+        rocket.onGround = true;
         rocket.landed = true;
         statusEl.textContent = 'Hard Landing';
       } else {
+        rocket.onGround = false;
         rocket.crashed = true;
         statusEl.textContent = 'Crashed';
         spawnExplosion();
