@@ -51,6 +51,7 @@
   var stars = [];
   var particles = [];
   var rotationSensitivity = 1;
+  var zoom = 1;
 
   var i;
   for (i = 0; i < 150; i += 1) {
@@ -164,7 +165,7 @@
   function update(deltaTime) {
     updateParticles(deltaTime);
 
-    if (state === 'LANDED' || state === 'CRASHED') {
+    if (state === 'CRASHED') {
       return;
     }
 
@@ -230,6 +231,14 @@
         state = 'FLYING';
         statusEl.textContent = 'Flying';
       }
+    } else if (state === 'LANDED') {
+      rocket.y = pad.y - rocket.heightM * 0.5;
+      rocket.vy = 0;
+      rocket.angularVelocity *= 0.85;
+      if (rocket.throttle > 0.12) {
+        state = 'FLYING';
+        statusEl.textContent = 'Flying';
+      }
     } else if (state === 'FLYING') {
       // Landing / crash checks only while flying and descending.
       if (touchingGround && rocket.vy > 0) {
@@ -240,8 +249,8 @@
         var onPad = rocket.x > pad.x && rocket.x < pad.x + pad.w;
         var angleAbs = Math.abs(normAngleDeg(rocket.angle));
 
-        var safeLanding = onPad && verticalSpeed < 6 && horizontalSpeed < 4 && angleAbs < 15;
-        var hardLanding = verticalSpeed < 10 && horizontalSpeed < 7 && angleAbs < 35;
+        var safeLanding = onPad && verticalSpeed <= 5 && horizontalSpeed <= 4 && angleAbs <= 20;
+        var hardLanding = onPad && verticalSpeed > 5 && verticalSpeed <= 13 && horizontalSpeed <= 7 && angleAbs <= 20;
 
         if (safeLanding) {
           state = 'LANDED';
@@ -268,14 +277,6 @@
     camera.y += (rocket.y - camera.y) * 0.1;
   }
 
-  function worldToScreenX(xMeters) {
-    return (xMeters - camera.x) * PIXELS_PER_METER + canvas.width / 2;
-  }
-
-  function worldToScreenY(yMeters) {
-    return (yMeters - camera.y) * PIXELS_PER_METER + canvas.height / 2;
-  }
-
   function drawBackground() {
     var g = ctx.createLinearGradient(0, 0, 0, canvas.height);
     g.addColorStop(0, '#020617');
@@ -283,29 +284,32 @@
     g.addColorStop(1, '#2f5532');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
+  function drawStars() {
     var s;
     for (s = 0; s < stars.length; s += 1) {
-      var sx = worldToScreenX(stars[s].x);
-      var sy = worldToScreenY(stars[s].y);
-      if (sx < -3 || sx > canvas.width + 3 || sy < -3 || sy > canvas.height + 3) {
+      var sx = stars[s].x * PIXELS_PER_METER;
+      var sy = stars[s].y * PIXELS_PER_METER;
+      if (sx < camera.x * PIXELS_PER_METER - canvas.width || sx > camera.x * PIXELS_PER_METER + canvas.width * 2 ||
+          sy < camera.y * PIXELS_PER_METER - canvas.height || sy > camera.y * PIXELS_PER_METER + canvas.height * 2) {
         continue;
       }
       ctx.fillStyle = 'rgba(255,255,255,' + stars[s].a + ')';
       ctx.beginPath();
-      ctx.arc(sx, sy, stars[s].r, 0, Math.PI * 2);
+      ctx.arc(sx, sy, stars[s].r / zoom, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
   function drawWorld() {
-    var gy = worldToScreenY(GROUND_Y_M);
-    var py = worldToScreenY(pad.y);
+    var gy = GROUND_Y_M * PIXELS_PER_METER;
+    var py = pad.y * PIXELS_PER_METER;
 
     ctx.fillStyle = '#2b4d2a';
-    ctx.fillRect(0, gy, canvas.width, canvas.height - gy);
+    ctx.fillRect(-100000, gy, 200000, 100000);
 
-    var px = worldToScreenX(pad.x);
+    var px = pad.x * PIXELS_PER_METER;
     ctx.fillStyle = '#7dd3fc';
     ctx.fillRect(px, py, pad.w * PIXELS_PER_METER, pad.h * PIXELS_PER_METER);
   }
@@ -315,8 +319,8 @@
       return;
     }
 
-    var x = worldToScreenX(rocket.x);
-    var y = worldToScreenY(rocket.y);
+    var x = rocket.x * PIXELS_PER_METER;
+    var y = rocket.y * PIXELS_PER_METER;
 
     ctx.save();
     ctx.translate(x, y);
@@ -373,8 +377,8 @@
   function drawParticles() {
     var p;
     for (p = 0; p < particles.length; p += 1) {
-      var px = worldToScreenX(particles[p].x);
-      var py = worldToScreenY(particles[p].y);
+      var px = particles[p].x * PIXELS_PER_METER;
+      var py = particles[p].y * PIXELS_PER_METER;
       ctx.globalAlpha = Math.max(0, particles[p].life);
       ctx.fillStyle = particles[p].c;
       ctx.beginPath();
@@ -403,10 +407,25 @@
   }
 
   function render() {
+    var altitude = Math.max(0, GROUND_Y_M - (rocket.y + rocket.heightM * 0.5));
+    zoom = Math.max(0.5, Math.min(1.5, 1.45 - altitude / 180));
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackground();
+    ctx.setTransform(
+      zoom,
+      0,
+      0,
+      zoom,
+      canvas.width / 2 - camera.x * PIXELS_PER_METER * zoom,
+      canvas.height / 2 - camera.y * PIXELS_PER_METER * zoom
+    );
+    drawStars();
     drawWorld();
     drawRocket();
     drawParticles();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     updateHud();
   }
 
